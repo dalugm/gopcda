@@ -1,0 +1,317 @@
+package opcda
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/oiweiwei/go-msrpc/dcerpc"
+	"github.com/oiweiwei/go-msrpc/midl/uuid"
+	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
+	exporter "github.com/oiweiwei/go-msrpc/msrpc/dcom/iobjectexporter/v0"
+	rem "github.com/oiweiwei/go-msrpc/msrpc/dcom/iremunknown/v0"
+	"github.com/oiweiwei/go-msrpc/ssp"
+	"github.com/oiweiwei/go-msrpc/ssp/credential"
+	"github.com/oiweiwei/go-msrpc/ssp/gssapi"
+)
+
+func cleanupContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 10*time.Second)
+}
+
+type objectPinger struct {
+	mu        sync.Mutex
+	errMu     sync.RWMutex
+	conn      dcerpc.Conn
+	client    exporter.ObjectExporterClient
+	set       uint64
+	sequence  uint16
+	objects   map[uint64]int
+	err       error
+	cancel    context.CancelFunc
+	rpcCancel context.CancelFunc
+	done      chan struct{}
+}
+
+func (c *dcomConn) retainObject(ctx context.Context, oid uint64, flags uint32) error {
+	if flags&0x1000 != 0 && c.serverFlags&0x1000 != 0 {
+		return nil
+	}
+	c.pingMu.Lock()
+	defer c.pingMu.Unlock()
+	if c.pinger == nil {
+		pingCtx, pingCancel := context.WithCancel(c.rpcCtx)
+		initialized := false
+		stopInit := context.AfterFunc(ctx, pingCancel)
+		defer func() {
+			stopInit()
+			if !initialized {
+				pingCancel()
+			}
+		}()
+		auth := gssapi.NewSecurityContext(
+			pingCtx,
+			gssapi.WithCredential(
+				credential.NewFromPassword(c.cfg.Domain+"\\"+c.cfg.Username, c.cfg.Password),
+			),
+			gssapi.WithMechanismFactory(ssp.NTLM),
+		)
+		conn, err := dcerpc.Dial(
+			auth,
+			c.cfg.Host,
+			dcerpc.WithEndpoint("ncacn_ip_tcp:[135]"),
+			dcerpc.WithMechanism(ssp.NTLM),
+		)
+		if err != nil {
+			return err
+		}
+		client, err := exporter.NewObjectExporterClient(
+			auth,
+			conn,
+			dcerpc.WithSeal(),
+			dcerpc.WithTargetName(c.cfg.Host),
+		)
+		if err != nil {
+			return errors.Join(err, closeRPC(conn))
+		}
+		p := &objectPinger{
+			rpcCancel: pingCancel,
+			conn:      conn,
+			client:    client,
+			objects:   map[uint64]int{},
+			done:      make(chan struct{}),
+		}
+		if c.serverFlags&0x1000 == 0 {
+			if err := p.add(ctx, c.serverOID); err != nil {
+				return errors.Join(err, closeRPC(conn))
+			}
+		}
+		loop, cancel := context.WithCancel(context.Background())
+		p.cancel = cancel
+		initialized = true
+		c.pinger = p
+		c.pingHealth.Store(p)
+		go p.run(loop)
+	}
+	if flags&0x1000 != 0 {
+		return nil
+	}
+	return c.pinger.add(ctx, oid)
+}
+
+func (p *objectPinger) change(ctx context.Context, add, del []uint64) error {
+	p.sequence++
+	r, err := p.client.ComplexPing(
+		ctx,
+		&exporter.ComplexPingRequest{
+			SetID:              p.set,
+			SequenceNum:        p.sequence,
+			AddToSetCount:      uint16(len(add)),
+			DeleteFromSetCount: uint16(len(del)),
+			AddToSet:           add,
+			DeleteFromSet:      del,
+		},
+	)
+	if err != nil {
+		err = fmt.Errorf("DCOM ComplexPing: %w", err)
+		p.setError(err)
+		return err
+	}
+	p.set = r.SetID
+	return nil
+}
+
+func (p *objectPinger) add(ctx context.Context, oid uint64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if oid == 0 {
+		return fmt.Errorf("missing OID for keepalive")
+	}
+	if err := p.healthError(); err != nil {
+		return err
+	}
+	if p.objects[oid] == 0 {
+		if err := p.change(ctx, []uint64{oid}, nil); err != nil {
+			return err
+		}
+	}
+	p.objects[oid]++
+	return nil
+}
+
+func (c *dcomConn) releaseObject(ctx context.Context, oid uint64) error {
+	c.pingMu.Lock()
+	defer c.pingMu.Unlock()
+	p := c.pinger
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.objects[oid] > 1 {
+		p.objects[oid]--
+		return nil
+	}
+	if p.objects[oid] == 0 {
+		return nil
+	}
+	delete(p.objects, oid)
+	return p.change(ctx, nil, []uint64{oid})
+}
+
+func (p *objectPinger) run(ctx context.Context) {
+	defer close(p.done)
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			call, cancel := context.WithTimeout(ctx, 10*time.Second)
+			p.mu.Lock()
+			if p.set != 0 {
+				_, err := p.client.SimplePing(call, &exporter.SimplePingRequest{SetID: p.set})
+				if err != nil && ctx.Err() == nil {
+					p.setError(fmt.Errorf("DCOM keepalive failed; reconnect: %w", err))
+				}
+			}
+			p.mu.Unlock()
+			cancel()
+		}
+	}
+}
+func (p *objectPinger) setError(err error) { p.errMu.Lock(); p.err = err; p.errMu.Unlock() }
+
+func (p *objectPinger) healthError() error { p.errMu.RLock(); defer p.errMu.RUnlock(); return p.err }
+
+func (c *dcomConn) keepaliveError() error {
+	p := c.pingHealth.Load()
+	if p == nil {
+		return nil
+	}
+	return p.healthError()
+}
+
+func (c *dcomConn) stopKeepalive(ctx context.Context) error {
+	c.pingMu.Lock()
+	p := c.pinger
+	c.pinger = nil
+	c.pingHealth.Store(nil)
+	c.pingMu.Unlock()
+	if p == nil {
+		return nil
+	}
+	p.cancel()
+	if p.rpcCancel != nil {
+		defer p.rpcCancel()
+	}
+	<-p.done
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	ids := make([]uint64, 0, len(p.objects))
+	for oid := range p.objects {
+		ids = append(ids, oid)
+	}
+	var err error
+	if len(ids) > 0 {
+		err = p.change(ctx, nil, ids)
+	}
+	return errors.Join(err, p.conn.Close(ctx))
+}
+
+func (c *dcomConn) closeContext(ctx context.Context) error {
+	if c.rpcCancel != nil {
+		defer c.rpcCancel()
+	}
+	c.groupsMu.Lock()
+	if c.closed {
+		c.groupsMu.Unlock()
+		return nil
+	}
+	c.closed = true
+	c.groupsMu.Unlock()
+	done := make(chan struct{})
+	go func() { c.groupOps.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		// Creation observes rpcCancel. Finish local teardown once it unwinds.
+		go func() {
+			<-done
+			cleanup, cancel := cleanupContext()
+			defer cancel()
+			_ = c.stopKeepalive(cleanup)
+			if c.serverConn != nil {
+				_ = c.serverConn.Close(cleanup)
+			}
+		}()
+		return ctx.Err()
+	}
+	var errs []error
+	c.groupsMu.Lock()
+	handles := make([]int, 0, len(c.groups))
+	for h := range c.groups {
+		handles = append(handles, h)
+	}
+	pending := make([]int, 0, len(c.pendingRemovals))
+	for h := range c.pendingRemovals {
+		pending = append(pending, h)
+	}
+	c.groupsMu.Unlock()
+	for _, h := range pending {
+		errs = append(errs, c.removeRemoteGroup(ctx, h))
+	}
+	for _, h := range handles {
+		errs = append(errs, c.removeGroupInternal(ctx, h))
+	}
+	errs = append(errs, c.releaseServerReference(ctx))
+	errs = append(errs, c.stopKeepalive(ctx))
+	if c.serverConn != nil {
+		errs = append(errs, c.serverConn.Close(ctx))
+	}
+	return errors.Join(errs...)
+}
+
+// releaseServerReference runs once during teardown, after group cleanup. A failed
+// RemRelease may have reached the server and must not be replayed.
+func (c *dcomConn) releaseServerReference(ctx context.Context) error {
+	if c.serverRefs == 0 {
+		return nil
+	}
+	if c.remoteUnknown == nil || c.remoteUnknown.UUID().Equals(&uuid.UUID{}) {
+		return fmt.Errorf("activation omitted IRemUnknown IPID for release")
+	}
+	if c.serverIPID == nil || c.serverIPID.UUID().Equals(&uuid.UUID{}) || c.serverConn == nil {
+		return fmt.Errorf("activation omitted server interface for release")
+	}
+	auth := gssapi.NewSecurityContext(
+		ctx,
+		gssapi.WithCredential(
+			credential.NewFromPassword(c.cfg.Domain+"\\"+c.cfg.Username, c.cfg.Password),
+		),
+		gssapi.WithMechanismFactory(ssp.NTLM),
+	)
+	// Bind IRemUnknown on the existing object transport, without sending its
+	// methods on IOPCServer's presentation context. closeContext owns the shared
+	// transport; closing this bound client separately would close it twice.
+	client, err := rem.NewRemoteUnknownClient(auth, c.serverConn,
+		dcerpc.WithSeal(), dcerpc.WithTargetName(c.cfg.Host),
+	)
+	if err != nil {
+		return fmt.Errorf("bind IRemUnknown for server reference release: %w", err)
+	}
+	_, err = client.IPID(ctx, c.remoteUnknown).RemoteRelease(ctx, &rem.RemoteReleaseRequest{
+		This:                     orpcThis(),
+		InterfaceReferencesCount: 1,
+		InterfaceReferences: []*dcom.RemoteInterfaceReference{
+			{IPID: c.serverIPID, PublicReferencesCount: c.serverRefs},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("release activated server reference: %w", err)
+	}
+	return nil
+}

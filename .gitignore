@@ -1,0 +1,12 @@
+# Local credentials and generated artifacts
+.env
+.env.*
+!.env.example
+/bin/
+/opcda
+*.test
+coverage.out
+.DS_Store
+# Default filenames from manual examples; real point lists stay local.
+/items.txt
+/itemids.txt
