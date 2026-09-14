@@ -224,6 +224,22 @@ not the library API. Set `OPCDA_PROGID` instead of `OPCDA_CLSID` to resolve a
 server name. If both are set, CLSID takes precedence. The write type defaults
 to `float32`; pass an explicit type from the table above for other values.
 
+Known HRESULTs include their symbolic name and meaning in the error text.
+The library describes OPC-specific errors and uses go-msrpc for standard HRESULTs;
+unknown codes retain their hexadecimal value. The CLI adds write outcome details on
+stderr, for example:
+
+```text
+opcda: write "Device.Tag": AddItems: HRESULT 0xc0040007 (OPC_E_UNKNOWNITEMID): the ItemID is not available in the server address space
+Write not attempted: item registration failed.
+```
+
+A failed AddItems registration precedes the write request. A transport failure
+during writing instead reports an unknown outcome and asks you to verify the
+value before retrying. Acknowledged writes with cleanup failures remain distinct.
+The CLI never retries a write automatically. Library callers
+should continue using `errors.As` / `errors.Is`, not parsing the error text.
+
 `items.txt` contains one complete ItemID per line. Polling reports the requested
 and revised intervals, read latency, overruns, quality counts, and item failures.
 The default command timeout is 180 seconds; override it with `OPCDA_TIMEOUT=10m`.

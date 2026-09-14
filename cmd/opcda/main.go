@@ -23,7 +23,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Getenv, os.Stdout, os.Stderr, connect); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		command := ""
+		if len(os.Args) > 1 {
+			command = os.Args[1]
+		}
+		fmt.Fprintln(os.Stderr, formatCommandError(command, err))
 		os.Exit(1)
 	}
 }

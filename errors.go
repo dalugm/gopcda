@@ -3,6 +3,8 @@ package opcda
 import (
 	"errors"
 	"fmt"
+
+	"github.com/oiweiwei/go-msrpc/msrpc/erref/hresult"
 )
 
 var (
@@ -31,10 +33,38 @@ type HRESULTError struct {
 }
 
 func (e *HRESULTError) Error() string {
-	if e.ItemID != "" {
-		return fmt.Sprintf("%s %q: HRESULT 0x%08x", e.Operation, e.ItemID, e.Code)
+	result := fmt.Sprintf("HRESULT 0x%08x", e.Code)
+	name, description := describeOPCError(e.Code)
+	if name == "" {
+		var standard *hresult.Error
+		if errors.As(hresult.FromCode(e.Code), &standard) {
+			name, description = standard.Name, standard.Details
+		}
 	}
-	return fmt.Sprintf("%s: HRESULT 0x%08x", e.Operation, e.Code)
+	if name != "" {
+		result += fmt.Sprintf(" (%s): %s", name, description)
+	}
+	if e.ItemID != "" {
+		return fmt.Sprintf("%s %q: %s", e.Operation, e.ItemID, result)
+	}
+	return fmt.Sprintf("%s: %s", e.Operation, result)
+}
+
+func describeOPCError(code uint32) (string, string) {
+	switch code {
+	case 0xc0040001:
+		return "OPC_E_INVALIDHANDLE", "the item handle is invalid"
+	case 0xc0040004:
+		return "OPC_E_BADTYPE", "the item does not accept the requested data type"
+	case 0xc0040006:
+		return "OPC_E_BADRIGHTS", "the operation is not permitted by the item's access rights"
+	case 0xc0040007:
+		return "OPC_E_UNKNOWNITEMID", "the ItemID is not available in the server address space"
+	case 0xc004000b:
+		return "OPC_E_RANGE", "the value is outside the item's allowed range"
+	default:
+		return "", ""
+	}
 }
 
 func hresultError(operation, itemID string, code int32) error {
