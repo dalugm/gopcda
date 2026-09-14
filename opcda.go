@@ -1,8 +1,8 @@
-// Package opcda implements a Go OPC DA (Data Access) client using go-msrpc
-// for pure-Go DCOM transport, making it cross-platform (Linux, macOS, Windows).
+// Package opcda implements a high-level OPC DA (Data Access) client using
+// go-opcda bindings and go-msrpc for cross-platform, pure-Go DCOM transport.
 //
 // Connect creates a server session. Reuse a Group for periodic batch reads and
-// on-demand float writes. The cmd tools are optional and are not used by the library.
+// on-demand scalar writes. The cmd tools are optional and are not used by the library.
 package opcda
 
 import "fmt"

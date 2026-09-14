@@ -1,6 +1,8 @@
 # gopcda
 
-A pure Go OPC DA 2 client built on [go-msrpc](https://github.com/oiweiwei/go-msrpc).
+A high-level, pure Go OPC DA 2 client built on
+[go-opcda](https://github.com/oiweiwei/go-opcda) bindings and
+[go-msrpc](https://github.com/oiweiwei/go-msrpc) RPC/DCOM transport.
 Browse items, read values, and write scalars through DCOM without a Windows COM
 runtime or a sidecar.
 
@@ -119,6 +121,20 @@ Batch writes and several scalar types have offline tests only. Intermittent
 activation failures were observed; this is not a production-reliability guarantee.
 See [validation details](docs/usage.md#compatibility-and-limitations) and
 [security notes](SECURITY.md).
+
+## Implementation
+
+`gopcda` owns the application-facing server/group API, persistent registrations,
+cancellable operations, per-item errors and session cleanup. Generated
+`go-opcda` bindings provide OPC request/response codecs; `go-msrpc` provides the
+underlying RPC/DCOM runtime. The existing bound connection and interface IPID
+remain responsible for routing each call.
+
+The adapters interpret HRESULTs in this library, preserving successful results
+when an operation reports partial success (`S_FALSE`). Small compatibility
+codecs remain where generated bindings cannot express existing contracts:
+length-counted BSTRs, UTF-16 string lengths, optional group-state fields and
+strict response-array validation. See [binding compatibility](docs/bindings.md).
 
 ## License
 

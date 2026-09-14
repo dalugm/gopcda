@@ -10,3 +10,6 @@ coverage.out
 # Default filenames from manual examples; real point lists stay local.
 /items.txt
 /itemids.txt
+
+# Local implementation plans and workflow notes
+/docs/superpowers/
