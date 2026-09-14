@@ -53,6 +53,7 @@ func TestCommands(t *testing.T) {
 				}
 				return f, nil
 			},
+			nil,
 		)
 		if err != nil || !f.closed {
 			t.Fatalf("%v closed=%v", err, f.closed)
@@ -93,6 +94,7 @@ func TestValidationAndHelp(t *testing.T) {
 				t.Fatal("unexpected connection")
 				return nil, nil
 			},
+			nil,
 		)
 		if len(args) == 1 && args[0] == "--help" {
 			if err != nil || !strings.Contains(out.String(), "usage:") {
@@ -113,7 +115,7 @@ func TestReadFailureClosesAndPrintsNoResult(t *testing.T) {
 			return "180s"
 		}
 		return "x"
-	}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return f, nil })
+	}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return f, nil }, nil)
 
 	if !errors.Is(err, want) || !f.closed || out.Len() != 0 {
 		t.Fatalf("err=%v closed=%v output=%q", err, f.closed, out.String())
@@ -140,7 +142,7 @@ func TestFloatWriteCommand(t *testing.T) {
 				return "180s"
 			}
 			return "x"
-		}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return f, nil })
+		}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return f, nil }, nil)
 		if err != nil || f.writes != 1 || f.id != "TEST.VALUE" || !f.closed {
 			t.Fatalf("%+v %v", f, err)
 		}
@@ -169,6 +171,7 @@ func TestWriteInvalidValuesNeverConnect(t *testing.T) {
 				t.Fatal("connected for invalid write")
 				return nil, nil
 			},
+			nil,
 		)
 		if err == nil {
 			t.Fatal(args)
@@ -185,7 +188,7 @@ func TestWriteFailureDoesNotRetryOrPrintSuccess(t *testing.T) {
 			return "180s"
 		}
 		return "x"
-	}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return f, nil })
+	}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return f, nil }, nil)
 	if !errors.Is(err, want) || f.writes != 1 || !f.closed || out.Len() != 0 {
 		t.Fatalf("%+v %v %s", f, err, out.String())
 	}
@@ -211,7 +214,7 @@ func TestStatusUsesCommandDeadline(t *testing.T) {
 	var out, diag bytes.Buffer
 	err := run(context.Background(), []string{"status"}, func(k string) string {
 		return map[string]string{"OPCDA_HOST": "host", "OPCDA_CLSID": "clsid", "OPCDA_TIMEOUT": "10ms"}[k]
-	}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return s, nil })
+	}, &out, &diag, func(context.Context, opcda.ServerConfig) (server, error) { return s, nil }, nil)
 	if !errors.Is(err, context.DeadlineExceeded) || !s.closed || out.Len() != 0 {
 		t.Fatal(err, s.closed, out.String())
 	}

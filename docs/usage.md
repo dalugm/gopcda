@@ -209,6 +209,7 @@ export OPCDA_USERNAME=YOUR_USER
 export OPCDA_CLSID=YOUR_SERVER_CLSID
 # Set OPCDA_PASSWORD securely in your local environment.
 
+go run ./cmd/opcda resolve "Example.Server.1"
 go run ./cmd/opcda status
 go run ./cmd/opcda browse
 go run ./cmd/opcda read "Pump.Speed"
@@ -223,6 +224,15 @@ go run ./cmd/opcda poll items.txt 500ms 180 cache
 not the library API. Set `OPCDA_PROGID` instead of `OPCDA_CLSID` to resolve a
 server name. If both are set, CLSID takes precedence. The write type defaults
 to `float32`; pass an explicit type from the table above for other values.
+
+`resolve PROGID` queries the remote OPCEnum service and prints only the CLSID
+followed by a newline to stdout. It requires `OPCDA_HOST`, uses the same credentials
+and `OPCDA_TIMEOUT`, and ignores `OPCDA_CLSID` and `OPCDA_PROGID`. The target
+OPC DA server is not activated. Diagnostics go to stderr. To reuse the result:
+
+```sh
+OPCDA_CLSID="$(go run ./cmd/opcda resolve 'Example.Server.1')" && export OPCDA_CLSID
+```
 
 Known HRESULTs include their symbolic name and meaning in the error text.
 The library describes OPC-specific errors and uses go-msrpc for standard HRESULTs;
