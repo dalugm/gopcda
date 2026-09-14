@@ -1,7 +1,7 @@
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/geoffgarside/ber v1.1.0 h1:qTmFG4jJbwiSzSXoNJeHcOprVzZ8Ulde2Rrrifu5U9w=
-github.com/geoffgarside/ber v1.1.0/go.mod h1:jVPKeCbj6MvQZhwLYsGwaGI52oUorHoHKNecGT85ZCc=
+github.com/geoffgarside/ber v1.2.0 h1:/loowoRcs/MWLYmGX9QtIAbA+V/FrnVLsMMPhwiRm64=
+github.com/geoffgarside/ber v1.2.0/go.mod h1:jVPKeCbj6MvQZhwLYsGwaGI52oUorHoHKNecGT85ZCc=
 github.com/gorilla/securecookie v1.1.1/go.mod h1:ra0sb63/xPlUeL+yeDciTfxMRAA+MP+HVt/4epWDjd4=
 github.com/gorilla/securecookie v1.1.2 h1:YCIWL56dvtr73r6715mJs5ZvhtnY73hBvEF8kXD8ePA=
 github.com/gorilla/securecookie v1.1.2/go.mod h1:NfCASbcHqRSY+3a8tlWJwsQap2VX5pwzwo4h3eOamfo=
@@ -31,10 +31,12 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/oiweiwei/go-math v1.0.0 h1:eBxtydohwi0RTfSX8EPQRO7Xt8j4Ck5v7PVv8Hvp7jg=
 github.com/oiweiwei/go-math v1.0.0/go.mod h1:rWG2PIZRYIjovChTlCcssArtO/s2pVj38c1h2QfH1UM=
-github.com/oiweiwei/go-msrpc v1.5.3 h1:J1969gE+MaTuanuWIggl/fxE41hi90zTHiiR3yOXT5k=
-github.com/oiweiwei/go-msrpc v1.5.3/go.mod h1:z3uYZ4AdooFX27OEUQ6y7IV1HjRELyOa+TKq0ju8ilI=
+github.com/oiweiwei/go-msrpc v1.5.4 h1:igeJnJ14G+SD42wLXwj4j0FtxdR4ict9ZiOMPQiwlHw=
+github.com/oiweiwei/go-msrpc v1.5.4/go.mod h1:z3uYZ4AdooFX27OEUQ6y7IV1HjRELyOa+TKq0ju8ilI=
 github.com/oiweiwei/go-oem v1.0.0 h1:77MJnres0RkNadz7oPEfsbUmZxw1XfYtl8yaxfm8bMM=
 github.com/oiweiwei/go-oem v1.0.0/go.mod h1:+QzsBHKmIIYsYk6Cx+vmjBNSymazlroCVurNRzsgyIg=
+github.com/oiweiwei/go-opcda v0.3.0 h1:F2tAdoAtki4h+MHc8DQJGg58j6Yl57wO4zVShP3VOhc=
+github.com/oiweiwei/go-opcda v0.3.0/go.mod h1:dKZAHZNMPb5Fmo4UcI/bEvJVcGs1AtjCW2ECDiyeqHU=
 github.com/oiweiwei/go-smb2.fork v1.0.2 h1:rHCaJhX37yNg7U/R7WeoSqlZQxudu/rSxFbA4xtpK2M=
 github.com/oiweiwei/go-smb2.fork v1.0.2/go.mod h1:h0CzLVvGAmq39izdYVHKyI5cLv6aHdbQAMKEe4dz4N8=
 github.com/oiweiwei/gokrb5.fork/v9 v9.0.7 h1:m5sNMe7ogxSQnL0SiOVNEdhc7VY/rUzbtBtFEsc2+vw=

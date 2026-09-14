@@ -1,11 +1,14 @@
 module github.com/dalugm/gopcda
 
-go 1.27.0
-
-require github.com/oiweiwei/go-msrpc v1.5.3
+go 1.27
 
 require (
-	github.com/geoffgarside/ber v1.1.0 // indirect
+	github.com/oiweiwei/go-msrpc v1.5.4
+	github.com/oiweiwei/go-opcda v0.3.0
+)
+
+require (
+	github.com/geoffgarside/ber v1.2.0 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/indece-official/go-ebcdic v1.2.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
