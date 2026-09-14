@@ -6,51 +6,13 @@ import (
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
 	"github.com/oiweiwei/go-msrpc/ndr"
+	binding "github.com/oiweiwei/go-opcda/opc/opcda"
+	statemgt "github.com/oiweiwei/go-opcda/opc/opcda/iopcgroupstatemgt/v0"
+	itemmgt "github.com/oiweiwei/go-opcda/opc/opcda/iopcitemmgt/v0"
+	syncio "github.com/oiweiwei/go-opcda/opc/opcda/iopcsyncio/v0"
 )
 
 const maxBatchItems = 1000
-
-func readArray[T any](
-	ctx context.Context,
-	w ndr.Reader,
-	count int,
-	target *[]T,
-	element func(context.Context, ndr.Reader, *T) error,
-) error {
-	if count < 1 || count > maxBatchItems {
-		return fmt.Errorf("invalid expected batch count %d", count)
-	}
-	body := ndr.UnmarshalNDRFunc(func(ctx context.Context, w ndr.Reader) error {
-		var n uint64
-		if err := w.ReadSize(&n); err != nil {
-			return err
-		}
-		if n != uint64(count) {
-			return fmt.Errorf("batch count %d, expected %d", n, count)
-		}
-		*target = make([]T, count)
-		for i := range *target {
-			if err := element(ctx, w, &(*target)[i]); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err := w.ReadPointer(target, func(v any) { *target = *v.(*[]T) }, body); err != nil {
-		return err
-	}
-	return w.ReadDeferred()
-}
-
-func readErrors(ctx context.Context, w ndr.Reader, count int, target *[]int32) error {
-	return readArray(
-		ctx,
-		w,
-		count,
-		target,
-		func(ctx context.Context, w ndr.Reader, v *int32) error { return w.ReadData(v) },
-	)
-}
 
 type batchAddRequest struct {
 	ids     []string
@@ -58,32 +20,23 @@ type batchAddRequest struct {
 }
 
 func (r *batchAddRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if err := writeORPC(ctx, w); err != nil {
-		return err
+	if len(r.ids) != len(r.clients) {
+		return fmt.Errorf("AddItems: mismatched item and client counts")
 	}
-	if err := w.WriteData(uint32(len(r.ids))); err != nil {
-		return err
-	}
-	if err := w.WriteSize(uint64(len(r.ids))); err != nil {
-		return err
-	}
+	items := make([]*binding.ItemDefinition, len(r.ids))
 	for i, id := range r.ids {
-		for _, value := range []string{"", id} {
-			text := value
-			body := ndr.MarshalNDRFunc(
-				func(ctx context.Context, w ndr.Writer) error { return ndr.WriteUTF16NString(ctx, w, text) },
-			)
-			if err := w.WritePointer(&text, body); err != nil {
-				return err
-			}
-		}
-		for _, v := range []any{uint32(1), r.clients[i], uint32(0), uint32(0), uint16(0), uint16(0)} {
-			if err := w.WriteData(v); err != nil {
-				return err
-			}
+		// A terminator requests a non-null empty access path from the generator.
+		items[i] = &binding.ItemDefinition{
+			AccessPath: "\x00",
+			ItemID:     id,
+			Active:     true,
+			Client:     r.clients[i],
 		}
 	}
-	return w.WriteDeferred()
+	return (&itemmgt.AddItemsRequest{This: orpcThis(), ItemArray: items}).MarshalNDR(
+		ctx,
+		bindingsWriter{w},
+	)
 }
 
 type batchAddResponse struct {
@@ -94,24 +47,29 @@ type batchAddResponse struct {
 }
 
 func (r *batchAddResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error {
-	r.items = nil
-	r.errors = nil
-	if err := readORPC(ctx, w); err != nil {
+	*r = batchAddResponse{count: r.count}
+	response := &itemmgt.AddItemsResponse{}
+	if err := response.UnmarshalNDR(ctx, bindingsReader{Reader: w, count: r.count}); err != nil {
 		return err
 	}
-	if err := readArray(
-		ctx,
-		w,
-		r.count,
-		&r.items,
-		func(ctx context.Context, w ndr.Reader, v *addOneResponse) error { return v.readInline(ctx, w) },
-	); err != nil {
-		return err
+	if response.AddResults != nil {
+		r.items = make([]addOneResponse, len(response.AddResults))
+		for i, item := range response.AddResults {
+			if item == nil {
+				return fmt.Errorf("AddItems: null result")
+			}
+			if item.Blob != nil && uint64(len(item.Blob)) != uint64(item.BlobSize) {
+				return fmt.Errorf("invalid item blob length")
+			}
+			r.items[i] = addOneResponse{
+				handle:    item.Server,
+				canonical: item.CanonicalDataType,
+				rights:    item.AccessRights,
+			}
+		}
 	}
-	if err := readErrors(ctx, w, r.count, &r.errors); err != nil {
-		return err
-	}
-	return w.ReadData(&r.hresult)
+	r.errors, r.hresult = response.Errors, response.Return
+	return nil
 }
 
 type batchReadRequest struct {
@@ -120,28 +78,14 @@ type batchReadRequest struct {
 }
 
 func (r *batchReadRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if err := writeORPC(ctx, w); err != nil {
-		return err
-	}
-	source := uint16(2)
+	source := binding.DataSource(2)
 	if r.cache {
 		source = 1
 	}
-	if err := w.WriteData(source); err != nil {
-		return err
-	}
-	if err := w.WriteData(uint32(len(r.handles))); err != nil {
-		return err
-	}
-	if err := w.WriteSize(uint64(len(r.handles))); err != nil {
-		return err
-	}
-	for _, h := range r.handles {
-		if err := w.WriteData(h); err != nil {
-			return err
-		}
-	}
-	return nil
+	return (&syncio.ReadRequest{This: orpcThis(), Source: source, Server: r.handles}).MarshalNDR(
+		ctx,
+		w,
+	)
 }
 
 type batchReadResponse struct {
@@ -152,24 +96,28 @@ type batchReadResponse struct {
 }
 
 func (r *batchReadResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error {
-	r.states = nil
-	r.errors = nil
-	if err := readORPC(ctx, w); err != nil {
+	*r = batchReadResponse{count: r.count}
+	response := &syncio.ReadResponse{}
+	if err := response.UnmarshalNDR(ctx, bindingsReader{Reader: w, count: r.count}); err != nil {
 		return err
 	}
-	if err := readArray(
-		ctx,
-		w,
-		r.count,
-		&r.states,
-		func(ctx context.Context, w ndr.Reader, v *readOneResponse) error { return v.readInline(ctx, w) },
-	); err != nil {
-		return err
+	if response.ItemValues != nil {
+		r.states = make([]readOneResponse, len(response.ItemValues))
+		for i, state := range response.ItemValues {
+			if state == nil || state.Timestamp == nil {
+				return fmt.Errorf("Read: missing item state or timestamp")
+			}
+			r.states[i] = readOneResponse{
+				client:   state.Client,
+				timeLow:  state.Timestamp.LowDateTime,
+				timeHigh: state.Timestamp.HighDateTime,
+				quality:  state.Quality,
+				variant:  state.DataValue,
+			}
+		}
 	}
-	if err := readErrors(ctx, w, r.count, &r.errors); err != nil {
-		return err
-	}
-	return w.ReadData(&r.hresult)
+	r.errors, r.hresult = response.Errors, response.Return
+	return nil
 }
 
 func (r *batchReadResponse) results(ids []string) ([]ReadResult, error) {
@@ -201,32 +149,13 @@ type batchWriteRequest struct {
 }
 
 func (r *batchWriteRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if err := writeORPC(ctx, w); err != nil {
-		return err
+	if len(r.handles) != len(r.values) {
+		return fmt.Errorf("Write: mismatched handle and value counts")
 	}
-	if err := w.WriteData(uint32(len(r.handles))); err != nil {
-		return err
-	}
-	if err := w.WriteSize(uint64(len(r.handles))); err != nil {
-		return err
-	}
-	for _, h := range r.handles {
-		if err := w.WriteData(h); err != nil {
-			return err
-		}
-	}
-	if err := w.WriteSize(uint64(len(r.values))); err != nil {
-		return err
-	}
-	for _, value := range r.values {
-		body := ndr.MarshalNDRFunc(
-			func(ctx context.Context, w ndr.Writer) error { return marshalWriteVariant(ctx, w, value) },
-		)
-		if err := w.WritePointer(value, body); err != nil {
-			return err
-		}
-	}
-	return w.WriteDeferred()
+	return (&syncio.WriteRequest{This: orpcThis(), Server: r.handles, ItemValues: r.values}).MarshalNDR(
+		ctx,
+		bindingsWriter{w},
+	)
 }
 
 type batchWriteResponse struct {
@@ -236,14 +165,13 @@ type batchWriteResponse struct {
 }
 
 func (r *batchWriteResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error {
-	r.errors = nil
-	if err := readORPC(ctx, w); err != nil {
+	*r = batchWriteResponse{count: r.count}
+	response := &syncio.WriteResponse{}
+	if err := response.UnmarshalNDR(ctx, bindingsReader{Reader: w, count: r.count}); err != nil {
 		return err
 	}
-	if err := readErrors(ctx, w, r.count, &r.errors); err != nil {
-		return err
-	}
-	return w.ReadData(&r.hresult)
+	r.errors, r.hresult = response.Errors, response.Return
+	return nil
 }
 
 type groupStateRequest struct {
@@ -252,6 +180,9 @@ type groupStateRequest struct {
 	deadband float32
 }
 
+// The generated SetStateRequest represents optional pointers as values and
+// always sends them. Preserve null (no change) for time bias, locale and client
+// handle until the binding exposes pointer presence.
 func (r *groupStateRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
 	if err := writeORPC(ctx, w); err != nil {
 		return err
@@ -286,53 +217,10 @@ type groupStateResponse struct {
 }
 
 func (r *groupStateResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error {
-	if err := readORPC(ctx, w); err != nil {
+	response := &statemgt.SetStateResponse{}
+	if err := response.UnmarshalNDR(ctx, w); err != nil {
 		return err
 	}
-	if err := w.ReadData(&r.rate); err != nil {
-		return err
-	}
-	return w.ReadData(&r.hresult)
-}
-
-func (r *addOneResponse) readInline(ctx context.Context, w ndr.Reader) error {
-	var reserved uint16
-	var blobSize uint32
-	for _, v := range []any{&r.handle, &r.canonical, &reserved, &r.rights, &blobSize} {
-		if err := w.ReadData(v); err != nil {
-			return err
-		}
-	}
-	var blob []byte
-	f := ndr.UnmarshalNDRFunc(func(ctx context.Context, w ndr.Reader) error {
-		var count uint64
-		if err := w.ReadSize(&count); err != nil {
-			return err
-		}
-		if count != uint64(blobSize) || count > uint64(w.Len()) {
-			return fmt.Errorf("invalid item blob length")
-		}
-		blob = make([]byte, int(count))
-		for i := range blob {
-			if err := w.ReadData(&blob[i]); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return w.ReadPointer(&blob, func(v any) { blob = *v.(*[]byte) }, f)
-}
-
-func (r *readOneResponse) readInline(ctx context.Context, w ndr.Reader) error {
-	var reserved uint16
-	for _, v := range []any{&r.client, &r.timeLow, &r.timeHigh, &r.quality, &reserved} {
-		if err := w.ReadData(v); err != nil {
-			return err
-		}
-	}
-	variant := ndr.UnmarshalNDRFunc(func(ctx context.Context, w ndr.Reader) error {
-		r.variant = &oaut.Variant{}
-		return unmarshalReadVariant(ctx, w, r.variant)
-	})
-	return w.ReadPointer(&r.variant, func(v any) { r.variant = *v.(**oaut.Variant) }, variant)
+	r.rate, r.hresult = response.RevisedUpdateRate, response.Return
+	return nil
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unicode/utf16"
 
 	dcom "github.com/oiweiwei/go-msrpc/msrpc/dcom"
 	"github.com/oiweiwei/go-msrpc/ndr"
+	iopcserver "github.com/oiweiwei/go-opcda/opc/opcda/iopcserver/v0"
 )
 
 type addGroupReq struct {
@@ -30,96 +32,102 @@ type addGroupResp struct {
 }
 
 func (r *addGroupReq) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if r.ORPCThis != nil {
-		if err := r.ORPCThis.MarshalNDR(ctx, w); err != nil {
-			return err
-		}
-	} else {
-		if err := (&dcom.ORPCThis{Version: &dcom.COMVersion{MajorVersion: 5, MinorVersion: 7}, CID: &dcom.CID{}}).MarshalNDR(
-			ctx,
-			w,
-		); err != nil {
-			return err
+	this := r.ORPCThis
+	if this == nil {
+		this = &dcom.ORPCThis{
+			Version: &dcom.COMVersion{MajorVersion: 5, MinorVersion: 7},
+			CID:     &dcom.CID{},
 		}
 	}
-	if err := w.WriteDeferred(); err != nil {
-		return err
+	riid := r.RIID
+	if riid == nil {
+		riid = iopcItemMgtIID
 	}
-
-	// szName is a top-level [ref,string], including when the name is empty.
-	if err := ndr.WriteUTF16NString(ctx, w, r.Name); err != nil {
-		return err
+	request := &iopcserver.AddGroupRequest{
+		This:                this,
+		Name:                r.Name,
+		Active:              r.Active != 0,
+		RequestedUpdateRate: r.ReqUpdateRate,
+		ClientGroup:         uint32(r.ClientHandle),
+		LCID:                r.LCID,
+		RIID:                riid,
 	}
-
-	if err := w.WriteData(r.Active); err != nil {
-		return err
-	}
-	if err := w.WriteData(r.ReqUpdateRate); err != nil {
-		return err
-	}
-	if err := w.WriteData(r.ClientHandle); err != nil {
-		return err
-	}
-
-	// pTimeBias: [in, unique] LONG*
 	if r.TimeBias != nil {
-		ptrBias := ndr.MarshalNDRFunc(func(ctx context.Context, w ndr.Writer) error {
-			return w.WriteData(*r.TimeBias)
-		})
-		if err := w.WritePointer(r.TimeBias, ptrBias); err != nil {
-			return err
-		}
-	} else {
-		if err := w.WritePointer(nil); err != nil {
-			return err
-		}
+		request.TimeBias = *r.TimeBias
 	}
-	if err := w.WriteDeferred(); err != nil {
-		return err
-	}
-
-	// pPercentDeadband: [in, unique] FLOAT*
 	if r.PercentDeadband != nil {
-		ptrDb := ndr.MarshalNDRFunc(func(ctx context.Context, w ndr.Writer) error {
-			return w.WriteData(*r.PercentDeadband)
-		})
-		if err := w.WritePointer(r.PercentDeadband, ptrDb); err != nil {
-			return err
-		}
-	} else {
-		if err := w.WritePointer(nil); err != nil {
-			return err
-		}
+		request.PercentDeadband = *r.PercentDeadband
 	}
-	if err := w.WriteDeferred(); err != nil {
-		return err
-	}
+	return request.MarshalNDR(ctx, &addGroupBindingsWriter{
+		bindingsWriter:      bindingsWriter{w},
+		nameUnits:           uint64(len(utf16.Encode([]rune(r.Name))) + 1),
+		nullTimeBias:        r.TimeBias == nil,
+		nullPercentDeadband: r.PercentDeadband == nil,
+	})
+}
 
-	if err := w.WriteData(r.LCID); err != nil {
-		return err
-	}
-	// riid: [in] REFIID — reference pointer to IID, marshaled inline
-	if r.RIID != nil {
-		if err := r.RIID.MarshalNDR(ctx, w); err != nil {
-			return err
-		}
-	} else {
-		if err := iopcItemMgtIID.MarshalNDR(ctx, w); err != nil {
-			return err
-		}
-	}
-	if err := w.WriteDeferred(); err != nil {
-		return err
-	}
+// AddGroup's generated name count is byte-based, and its scalar fields cannot
+// express null unique pointers. Correct only those fields for this request.
+type addGroupBindingsWriter struct {
+	bindingsWriter
+	nameUnits           uint64
+	nameSize            int
+	nullTimeBias        bool
+	nullPercentDeadband bool
+}
 
-	return nil
+func (w *addGroupBindingsWriter) WriteSize(size uint64) error {
+	if w.nameSize == 0 || w.nameSize == 2 {
+		size = w.nameUnits
+	}
+	w.nameSize++
+	return w.Writer.WriteSize(size)
+}
+
+func (w *addGroupBindingsWriter) WritePointer(ptr ndr.Pointer, bodies ...ndr.Marshaler) error {
+	switch ptr.(type) {
+	case *int32:
+		if w.nullTimeBias {
+			return w.Writer.WritePointer(nil)
+		}
+	case *float32:
+		if w.nullPercentDeadband {
+			return w.Writer.WritePointer(nil)
+		}
+	}
+	return w.bindingsWriter.WritePointer(ptr, bodies...)
 }
 
 func (r *addGroupResp) UnmarshalNDR(ctx context.Context, rd ndr.Reader) error {
-	return readGroupResponse(ctx, rd, r)
+	response := &iopcserver.AddGroupResponse{}
+	if err := response.UnmarshalNDR(ctx, bindingsReader{Reader: rd}); err != nil {
+		return err
+	}
+	*r = addGroupResp{
+		ORPCThat:     response.That,
+		ServerHandle: int32(response.ServerGroup),
+		RevisedRate:  response.RevisedUpdateRate,
+		Return:       response.Return,
+	}
+	if response.Unknown != nil {
+		r.GroupIface = response.Unknown.InterfacePointer()
+	}
+	return nil
 }
 
-func (r *addGroupResp) MarshalNDR(ctx context.Context, w ndr.Writer) error { return nil }
+func (r *addGroupResp) MarshalNDR(ctx context.Context, w ndr.Writer) error {
+	var unknown *dcom.Unknown
+	if r.GroupIface != nil {
+		unknown = &dcom.Unknown{DataCount: r.GroupIface.DataCount, Data: r.GroupIface.Data}
+	}
+	return (&iopcserver.AddGroupResponse{
+		That:              r.ORPCThat,
+		ServerGroup:       uint32(r.ServerHandle),
+		RevisedUpdateRate: r.RevisedRate,
+		Unknown:           unknown,
+		Return:            r.Return,
+	}).MarshalNDR(ctx, bindingsWriter{w})
+}
 
 // ── IOPCServer::GetStatus (wire opnum 6, including IUnknown methods) ────────
 
@@ -128,22 +136,21 @@ type getStatusReq struct {
 }
 
 func (r *getStatusReq) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if r.ORPCThis != nil {
-		if err := r.ORPCThis.MarshalNDR(ctx, w); err != nil {
-			return err
-		}
-	} else {
-		if err := (&dcom.ORPCThis{Version: &dcom.COMVersion{MajorVersion: 5, MinorVersion: 7}}).MarshalNDR(
-			ctx,
-			w,
-		); err != nil {
-			return err
-		}
+	this := r.ORPCThis
+	if this == nil {
+		this = orpcThis()
 	}
-	return w.WriteDeferred()
+	return (&iopcserver.GetStatusRequest{This: this}).MarshalNDR(ctx, bindingsWriter{w})
 }
 
-func (r *getStatusReq) UnmarshalNDR(ctx context.Context, rd ndr.Reader) error { return nil }
+func (r *getStatusReq) UnmarshalNDR(ctx context.Context, rd ndr.Reader) error {
+	request := &iopcserver.GetStatusRequest{}
+	if err := request.UnmarshalNDR(ctx, bindingsReader{Reader: rd}); err != nil {
+		return err
+	}
+	r.ORPCThis = request.This
+	return nil
+}
 
 // serverStatusWire follows OPCSERVERSTATUS in opcda.idl. FILETIME is two
 // DWORDs (4-byte alignment), not an NDR hyper integer (8-byte alignment).
@@ -155,26 +162,6 @@ type serverStatusWire struct {
 	Vendor                        string
 }
 
-func (s *serverStatusWire) UnmarshalNDR(ctx context.Context, r ndr.Reader) error {
-	if err := r.ReadAlign(4); err != nil {
-		return err
-	}
-	for i := range s.Times {
-		if err := r.ReadData(&s.Times[i]); err != nil {
-			return err
-		}
-	}
-	for _, v := range []any{&s.State, &s.Groups, &s.Bandwidth, &s.Major, &s.Minor, &s.Build, &s.Reserved} {
-		if err := r.ReadData(v); err != nil {
-			return err
-		}
-	}
-	vendor := ndr.UnmarshalNDRFunc(
-		func(ctx context.Context, r ndr.Reader) error { return ndr.ReadUTF16NString(ctx, r, &s.Vendor) },
-	)
-	return r.ReadPointer(&s.Vendor, func(v any) { s.Vendor = *v.(*string) }, vendor)
-}
-
 type getStatusResp struct {
 	ORPCThat   *dcom.ORPCThat
 	StatusData *serverStatusWire
@@ -182,28 +169,34 @@ type getStatusResp struct {
 }
 
 func (r *getStatusResp) UnmarshalNDR(ctx context.Context, rd ndr.Reader) error {
-	*r = getStatusResp{ORPCThat: &dcom.ORPCThat{}}
-	if err := r.ORPCThat.UnmarshalNDR(ctx, rd); err != nil {
+	response := &iopcserver.GetStatusResponse{}
+	if err := response.UnmarshalNDR(ctx, bindingsReader{Reader: rd}); err != nil {
 		return err
 	}
-	if err := rd.ReadDeferred(); err != nil {
-		return err
+	*r = getStatusResp{ORPCThat: response.That, Return: response.Return}
+	if response.ServerStatus == nil {
+		return nil
 	}
-	body := ndr.UnmarshalNDRFunc(func(ctx context.Context, rd ndr.Reader) error {
-		r.StatusData = &serverStatusWire{}
-		return r.StatusData.UnmarshalNDR(ctx, rd)
-	})
-	if err := rd.ReadPointer(
-		&r.StatusData,
-		func(v any) { r.StatusData = *v.(**serverStatusWire) },
-		body,
-	); err != nil {
-		return err
+	status := response.ServerStatus
+	r.StatusData = &serverStatusWire{
+		State:     uint16(status.ServerState),
+		Groups:    status.GroupCount,
+		Bandwidth: status.Bandwidth,
+		Major:     status.MajorVersion,
+		Minor:     status.MinorVersion,
+		Build:     status.BuildNumber,
+		Vendor:    status.VendorInformation,
 	}
-	if err := rd.ReadDeferred(); err != nil {
-		return err
+	if status.StartTime != nil {
+		r.StatusData.Times[0], r.StatusData.Times[1] = status.StartTime.LowDateTime, status.StartTime.HighDateTime
 	}
-	return rd.ReadData(&r.Return)
+	if status.CurrentTime != nil {
+		r.StatusData.Times[2], r.StatusData.Times[3] = status.CurrentTime.LowDateTime, status.CurrentTime.HighDateTime
+	}
+	if status.LastUpdateTime != nil {
+		r.StatusData.Times[4], r.StatusData.Times[5] = status.LastUpdateTime.LowDateTime, status.LastUpdateTime.HighDateTime
+	}
+	return nil
 }
 
 func (r *getStatusResp) serverStatus() (*ServerStatus, error) {

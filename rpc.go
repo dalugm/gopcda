@@ -11,6 +11,9 @@ import (
 	"github.com/oiweiwei/go-msrpc/ndr"
 )
 
+// opcOp sends generated OPC codecs over the connection and IPID already
+// selected by the session. HRESULT interpretation stays in the adapters so
+// successful status codes (including S_FALSE) retain their per-item results.
 type opcOp struct {
 	opNum       int
 	interfaceID *uuid.UUID

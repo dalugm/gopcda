@@ -4,26 +4,13 @@ import (
 	"context"
 
 	"github.com/oiweiwei/go-msrpc/ndr"
+	itemmgt "github.com/oiweiwei/go-opcda/opc/opcda/iopcitemmgt/v0"
 )
 
 type batchRemoveRequest struct{ handles []uint32 }
 
 func (r *batchRemoveRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if err := writeORPC(ctx, w); err != nil {
-		return err
-	}
-	if err := w.WriteData(uint32(len(r.handles))); err != nil {
-		return err
-	}
-	if err := w.WriteSize(uint64(len(r.handles))); err != nil {
-		return err
-	}
-	for _, handle := range r.handles {
-		if err := w.WriteData(handle); err != nil {
-			return err
-		}
-	}
-	return nil
+	return (&itemmgt.RemoveItemsRequest{This: orpcThis(), Server: r.handles}).MarshalNDR(ctx, w)
 }
 
 type batchRemoveResponse struct {
@@ -33,12 +20,11 @@ type batchRemoveResponse struct {
 }
 
 func (r *batchRemoveResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error {
-	r.errors = nil
-	if err := readORPC(ctx, w); err != nil {
+	*r = batchRemoveResponse{count: r.count}
+	response := &itemmgt.RemoveItemsResponse{}
+	if err := response.UnmarshalNDR(ctx, bindingsReader{Reader: w, count: r.count}); err != nil {
 		return err
 	}
-	if err := readErrors(ctx, w, r.count, &r.errors); err != nil {
-		return err
-	}
-	return w.ReadData(&r.hresult)
+	r.errors, r.hresult = response.Errors, response.Return
+	return nil
 }
