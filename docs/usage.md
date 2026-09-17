@@ -263,6 +263,7 @@ go run ./cmd/opcda resolve "Example.Server.1"
 go run ./cmd/opcda status
 go run ./cmd/opcda browse
 go run ./cmd/opcda read "Pump.Speed"
+go run ./cmd/opcda properties "Pump.Speed"
 go run ./cmd/opcda write "Pump.Speed" 12.5 float32
 go run ./cmd/opcda write "Pump.Enabled" true bool
 go run ./cmd/opcda write "Counter.Total" 18446744073709551615 uint64
@@ -317,8 +318,8 @@ this package do not need to invoke it.
 
 - Scalar and array reads and writes are supported, including native `VT_UI8` as
   `uint64`. Preserve integer types downstream to avoid floating-point precision loss.
-- DATE values use `time.Time` at millisecond precision. DATE contains no
-  timezone; UTC is a representation convention.
+- DATE values use `time.Time` at millisecond precision, including property
+  timestamps. DATE contains no timezone; UTC is a representation convention.
 - COM object values and custom records are not supported.
 - DA3 browsing, hierarchical browsing,
   cross-exporter enumeration, subscriptions, and automatic reconnection are not implemented.

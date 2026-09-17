@@ -6,6 +6,26 @@ A high-level, pure Go OPC DA 2 client built on
 Browse items, read values, and write values through DCOM without a Windows COM
 runtime or a sidecar.
 
+Query item metadata separately from value reads:
+
+```sh
+go run ./cmd/opcda properties 'Pump.Speed'
+```
+
+Uses the same `OPCDA_*` connection environment variables as `read`. The library
+API is `server.ItemProperties(ctx, itemID)`. It enumerates advertised properties
+and reads their values through `IOPCItemProperties`, without creating a group.
+Property 101 is the optional item description; 100 is engineering units and
+102/103 are the high/low engineering limits. The property's name is a label,
+not the item's description: read the value of property 101.
+
+CLI `descriptionStatus` distinguishes `available`, `empty`, `notProvided` and
+`error`. Per-property failures remain in the JSON output and cause a nonzero
+exit status; interface or transport failures are reported on stderr. Property
+values use the same conversions as `ReadItem`. Known unsupported values are
+reported per property; malformed or unknown wire types can fail the containing
+RPC. The server may omit optional metadata entirely.
+
 Early-stage library: the API may change. **Synchronous operations only;
 subscriptions and automatic reconnection are not implemented.**
 
@@ -102,7 +122,7 @@ supported value types, CLI commands, and development checks.
 
 ## Value types
 
-The following mappings apply to item reads and writes. Named
+The following mappings apply to item reads, property values and writes. Named
 constants such as `opcda.VTR8`, `opcda.VTArray` and `opcda.VTByRef` match the
 Automation definitions; tests check their values against the upstream bindings.
 

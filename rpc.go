@@ -2,6 +2,7 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/oiweiwei/go-msrpc/dcerpc"
@@ -66,4 +67,31 @@ func closeRPC(conn dcerpc.Conn) error {
 	ctx, cancel := cleanupContext()
 	defer cancel()
 	return conn.Close(ctx)
+}
+
+// bindCleanupTransport forwards operation cancellation only while binding. The
+// transport then follows lifetime until cancel is called after remote cleanup.
+func bindCleanupTransport(
+	ctx context.Context,
+	lifetime context.Context,
+	bind func(context.Context) (dcerpc.Conn, error),
+) (dcerpc.Conn, context.CancelFunc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	transportCtx, cancel := context.WithCancel(lifetime)
+	stopBind := context.AfterFunc(ctx, cancel)
+	conn, err := bind(transportCtx)
+	stopBind()
+	if err == nil {
+		err = errors.Join(ctx.Err(), transportCtx.Err())
+	}
+	if err != nil {
+		if conn != nil {
+			err = errors.Join(err, closeRPC(conn))
+		}
+		cancel()
+		return nil, nil, err
+	}
+	return conn, cancel, nil
 }

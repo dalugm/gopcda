@@ -12,11 +12,12 @@ import (
 	opcda "github.com/dalugm/gopcda"
 )
 
-const usage = "usage: opcda resolve PROGID | status | browse | read ITEM_ID | write ITEM_ID VALUE [TYPE] | poll ITEM_FILE INTERVAL [CYCLES] [cache|device]\nConnection: OPCDA_HOST, OPCDA_CLSID or OPCDA_PROGID, OPCDA_DOMAIN, OPCDA_USERNAME, OPCDA_PASSWORD\nResolve uses the positional ProgID and ignores OPCDA_CLSID and OPCDA_PROGID.\nOptional: OPCDA_TIMEOUT=180s\nWrite types: bool, int8/16/32/64, uint8/16/32/64, float32 (default), float64, string, date, currency, decimal, error, int, uint, empty, null"
+const usage = "usage: opcda resolve PROGID | status | browse | properties ITEM_ID | read ITEM_ID | write ITEM_ID VALUE [TYPE] | poll ITEM_FILE INTERVAL [CYCLES] [cache|device]\nConnection: OPCDA_HOST, OPCDA_CLSID or OPCDA_PROGID, OPCDA_DOMAIN, OPCDA_USERNAME, OPCDA_PASSWORD\nResolve uses the positional ProgID and ignores OPCDA_CLSID and OPCDA_PROGID.\nOptional: OPCDA_TIMEOUT=180s\nWrite types: bool, int8/16/32/64, uint8/16/32/64, float32 (default), float64, string, date, currency, decimal, error, int, uint, empty, null"
 
 type server interface {
 	GetServerStatusContext(context.Context) (*opcda.ServerStatus, error)
 	BrowseItemIDs(context.Context) ([]string, error)
+	ItemProperties(context.Context, string) ([]opcda.ItemProperty, error)
 	ReadItem(context.Context, string) (*opcda.ReadResult, error)
 	WriteItem(context.Context, string, any) error
 	AddGroupContext(context.Context, string, int, float32) (*opcda.Group, error)
@@ -47,7 +48,7 @@ func run(
 		if len(args) != 1 {
 			return fmt.Errorf("%s", usage)
 		}
-	case "read", "resolve":
+	case "read", "resolve", "properties":
 		if len(args) != 2 || args[1] == "" {
 			return fmt.Errorf("%s", usage)
 		}
@@ -99,6 +100,12 @@ func run(
 		retErr = errors.Join(retErr, srv.Close(cleanup))
 	}()
 	switch args[0] {
+	case "properties":
+		properties, err := srv.ItemProperties(ctx, args[1])
+		if err != nil {
+			return err
+		}
+		return printProperties(out, args[1], properties)
 	case "poll":
 		g, err := srv.AddGroupContext(ctx, "", int(poll.interval.Milliseconds()), 0)
 		if err != nil {
