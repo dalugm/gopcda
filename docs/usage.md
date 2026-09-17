@@ -72,7 +72,7 @@ through DCOM ping sets. Cleanup failures are returned, not silently retried.
 
 ## Writing values
 
-Writes accept the scalar types below. Integers retain their exact bit width and
+Writes accept the value types below. Integers retain their exact bit width and
 precision; no conversion through floating point occurs. Add each target item to the
 group before writing:
 
@@ -181,7 +181,7 @@ machine's OPCEnum service and returns a CLSID string. It does not consult the
 client's local registry. If OPCEnum is unavailable or access is denied, supply
 an independently verified CLSID to connect directly.
 
-## Scalar values
+## Value types
 
 | Go type | COM VARIANT type |
 | --- | --- |
@@ -190,6 +190,14 @@ an independently verified CLSID to connect directly.
 | `uint8`, `uint16`, `uint32`, `uint64` | `VT_UI1`, `VT_UI2`, `VT_UI4`, `VT_UI8` |
 | `float32`, `float64` | `VT_R4`, `VT_R8` |
 | `string` | `VT_BSTR` |
+| `time.Time` | `VT_DATE` |
+| `opcda.Currency` | `VT_CY`, signed integer in units of 1/10000 |
+| `opcda.Decimal` | `VT_DECIMAL`, exact 96-bit coefficient, scale 0..28 and sign |
+| `opcda.ErrorCode` | `VT_ERROR`, a data value, not an operation error |
+| `opcda.Variant{Type: opcda.VTEmpty}` / `{Type: opcda.VTNull}` | Explicit `VT_EMPTY` / `VT_NULL` writes |
+| `opcda.Variant{Type: opcda.VTInt, Value: int32(n)}` / `{Type: opcda.VTUint, Value: uint32(n)}` | Explicit `VT_INT` / `VT_UINT` writes |
+| `opcda.Array` | `VT_ARRAY` with element type, bounds and flat values |
+| `opcda.Variant{Type: baseType \| opcda.VTByRef, Value: value}` | `VT_BYREF` wrapper |
 
 These types are supported by single-item and persistent-group reads and writes.
 Strings must be valid UTF-8 and are encoded as UTF-16, including embedded NULs.
@@ -197,6 +205,48 @@ An empty Go string writes an empty BSTR. Floats must be finite. Writes reject
 `int`, `uint`, pointers, slices, and other types; convert to an explicit supported
 type first. The server still decides whether a value can be written or converted
 to a point's canonical type, and reports failures through per-item HRESULTs.
+
+DATE is read and written at millisecond precision, in years 100..9999. It carries
+no timezone: returned `time.Time` uses UTC as a representation convention. Writes
+normalize the supplied time to UTC; callers must apply any server-specific wall
+clock convention themselves. Currency and decimal JSON values are exact decimal
+strings, not floating-point approximations. `ErrorCode` does not implement
+`error`; inspect the operation/per-item error and quality separately.
+
+Ordinary EMPTY/NULL reads both return nil; INT/UINT return int32/uint32. Within
+VARIANT arrays and BYREF values, `Variant.Type` retains the original type tag.
+BYREF is a value snapshot, not a usable pointer into the server's memory.
+`VT_VARIANT|VT_BYREF` requires a nested `Variant` value.
+
+### Arrays
+
+`Array.Bounds` uses SAFEARRAY wire order: the rightmost, fastest-changing dimension
+comes first. `Values` is flattened in that order. Lower bounds need not be zero.
+The number of values must equal the product of the dimension counts. For example:
+
+```go
+value := opcda.Array{
+    ElementType: opcda.VTR8,
+    Bounds: []opcda.ArrayBound{{Lower: -1, Count: 3}},
+    Values: []any{float64(1.5), float64(2.5), float64(3.5)},
+}
+err := server.WriteItem(ctx, "Pump.History", value)
+```
+
+Supported element types are integers, floats, BOOL, BSTR, CY, DATE, ERROR and
+VARIANT. Use `ElementType: opcda.VTVariant` and `Variant` elements for mixed values or DECIMAL:
+MS-OAUT does not permit a native DECIMAL SAFEARRAY. Nested arrays are represented
+inside VARIANT elements. Nil bounds and nil values together denote a null array;
+a dimension with count zero denotes an empty array. Limits are 32 dimensions,
+1,048,576 elements per array and 32 nesting levels. COM objects and custom records
+are not exposed or written: known payloads are consumed and reported as per-item
+unsupported-value errors, preserving valid siblings and server HRESULTs.
+Malformed or unknown wire encodings can fail the containing RPC.
+
+```go
+amount := opcda.Decimal{Lo: 12345, Scale: 2} // 123.45, without float rounding
+reference := opcda.Variant{Type: opcda.VTI4 | opcda.VTByRef, Value: int32(42)}
+```
 
 ## Command-line tool
 
@@ -217,13 +267,20 @@ go run ./cmd/opcda write "Pump.Speed" 12.5 float32
 go run ./cmd/opcda write "Pump.Enabled" true bool
 go run ./cmd/opcda write "Counter.Total" 18446744073709551615 uint64
 go run ./cmd/opcda write "Batch.Name" "Batch A" string
+go run ./cmd/opcda write "Batch.Timestamp" "2026-09-15T10:00:00Z" date
+go run ./cmd/opcda write "Batch.Amount" "123.4500" currency
+go run ./cmd/opcda write "Batch.PreciseAmount" "123.456789" decimal
 go run ./cmd/opcda poll items.txt 500ms 180 cache
 ```
 
 `OPCDA_*` variables belong to this optional tool and the opt-in live tests,
 not the library API. Set `OPCDA_PROGID` instead of `OPCDA_CLSID` to resolve a
 server name. If both are set, CLSID takes precedence. The write type defaults
-to `float32`; pass an explicit type from the table above for other values.
+to `float32`. CLI types are bool, int8/16/32/64, uint8/16/32/64, float32/64,
+string, date (RFC3339), currency, decimal, error (decimal or hex code),
+int/uint (explicit 32-bit VT_INT/VT_UINT), empty (`""`) and null (`null`).
+Currency/decimal inputs use plain base-10 notation without exponents. Array and
+BYREF writes are available through the Go API, not through CLI text parsing.
 
 `resolve PROGID` queries the remote OPCEnum service and prints only the CLSID
 followed by a newline to stdout. It requires `OPCDA_HOST`, uses the same credentials
@@ -258,20 +315,15 @@ this package do not need to invoke it.
 
 ## Compatibility and limitations
 
-- Scalar reads and writes are supported, including native `VT_UI8` as
+- Scalar and array reads and writes are supported, including native `VT_UI8` as
   `uint64`. Preserve integer types downstream to avoid floating-point precision loss.
-- Arrays, DATE conversion, DA3 browsing, hierarchical browsing,
+- DATE values use `time.Time` at millisecond precision. DATE contains no
+  timezone; UTC is a representation convention.
+- COM object values and custom records are not supported.
+- DA3 browsing, hierarchical browsing,
   cross-exporter enumeration, subscriptions, and automatic reconnection are not implemented.
 
-Live testing against SUPCON 2.0.1 on macOS covered activation, status, flat browsing,
-single-item reads, and persistent 1,000-item reads. At requested polling intervals
-of 500ms and 1s, mean cache-read latency was approximately 10.6ms and 10.7ms over
-180 and 80 cycles. The server revised the 500ms update rate to 600ms. Many items
-returned Bad quality. These short runs are not a long-term reliability guarantee.
-Single-item float writes were manually verified. Other write types, batch writes,
-ProgID resolution, and native uint64 points have offline tests but have not been
-live-validated. Some activation attempts returned
-`0x80070005`; the intermittent failure remains unresolved.
+This project is under development and may still contain undiscovered issues.
 
 ## Development
 

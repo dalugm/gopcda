@@ -31,6 +31,8 @@ func parseWriteValue(text, kind string) (any, error) {
 		return text, nil
 	case "bool":
 		return strconv.ParseBool(text)
+	case "date", "currency", "decimal", "error", "empty", "null", "int", "uint":
+		return parseAutomationValue(text, kind)
 	case "int8", "int16", "int32", "int64":
 		bits, _ := strconv.Atoi(kind[3:])
 		value, err := strconv.ParseInt(text, 10, bits)
@@ -72,7 +74,7 @@ func parseWriteValue(text, kind string) (any, error) {
 		bits = 64
 	default:
 		return nil, fmt.Errorf(
-			"unsupported write type %q; use bool, fixed-width integers, float32, float64, or string",
+			"unsupported write type %q; see the write types in --help",
 			kind,
 		)
 	}

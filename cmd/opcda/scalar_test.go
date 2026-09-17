@@ -29,7 +29,7 @@ func TestScalarWriteParsing(t *testing.T) {
 			t.Fatalf("%s: %v (%T), %v", tc.kind, got, got, err)
 		}
 	}
-	for _, tc := range [][2]string{{"int8", "128"}, {"int8", "-129"}, {"uint8", "256"}, {"uint64", "-1"}, {"uint64", "18446744073709551616"}, {"int64", "9223372036854775808"}, {"bool", "yes"}, {"int", "1"}, {"uint", "1"}} {
+	for _, tc := range [][2]string{{"int8", "128"}, {"int8", "-129"}, {"uint8", "256"}, {"uint64", "-1"}, {"uint64", "18446744073709551616"}, {"int64", "9223372036854775808"}, {"bool", "yes"}, {"int", "2147483648"}, {"uint", "4294967296"}} {
 		if _, err := parseWriteValue(tc[1], tc[0]); err == nil {
 			t.Fatalf("accepted %v", tc)
 		}

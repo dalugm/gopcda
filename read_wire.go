@@ -2,6 +2,7 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
@@ -46,13 +47,13 @@ func (r *addOneResponse) check() error {
 		return hresultError("AddItems", "", r.hresult)
 	}
 	if !r.hasError {
-		return fmt.Errorf("AddItems: missing item HRESULT")
+		return errors.New("AddItems: missing item HRESULT")
 	}
 	if r.itemError < 0 {
 		return hresultError("AddItems", "", r.itemError)
 	}
 	if !r.hasResult {
-		return fmt.Errorf("AddItems: missing result")
+		return errors.New("AddItems: missing result")
 	}
 	return nil
 }
@@ -95,13 +96,13 @@ func (r *readOneResponse) result(id string) (*ReadResult, error) {
 		return nil, hresultError("Read", "", r.hresult)
 	}
 	if !r.hasError {
-		return nil, fmt.Errorf("Read: missing item HRESULT")
+		return nil, errors.New("Read: missing item HRESULT")
 	}
 	if r.itemError < 0 {
 		return nil, hresultError("Read", id, r.itemError)
 	}
 	if !r.hasState || r.variant == nil {
-		return nil, fmt.Errorf("Read: missing item state or VARIANT")
+		return nil, errors.New("Read: missing item state or VARIANT")
 	}
 	value, err := scalarValue(r.variant)
 	if err != nil {
@@ -117,30 +118,93 @@ func (r *readOneResponse) result(id string) (*ReadResult, error) {
 }
 
 func scalarValue(v *oaut.Variant) (any, error) {
+	return scalarValueDepth(v, 0)
+}
+
+func scalarValueDepth(v *oaut.Variant, depth int) (any, error) {
+	if depth > 32 {
+		return nil, errors.New("VARIANT nesting exceeds 32")
+	}
+	if v == nil || v.VarUnion == nil {
+		return nil, errors.New("missing VARIANT value")
+	}
+	if v.VT&VTByRef != 0 {
+		base := *v
+		base.VT &^= VTByRef
+		if base.VT == VTVariant {
+			inner, ok := v.VarUnion.GetValue().(*oaut.Variant)
+			if !ok || inner == nil {
+				return nil, errors.New("missing BYREF VARIANT")
+			}
+			value, err := scalarValueDepth(inner, depth+1)
+			if inner.VT&VTByRef == 0 {
+				value = Variant{Type: inner.VT, Value: value}
+			}
+			return Variant{Type: v.VT, Value: value}, err
+		}
+		value, err := scalarValueDepth(&base, depth+1)
+		return Variant{Type: v.VT, Value: value}, err
+	}
+	if v.VT&VTArray != 0 {
+		a, ok := v.VarUnion.GetValue().(*oaut.SafeArray)
+		if !ok {
+			return nil, errors.New("invalid SAFEARRAY")
+		}
+		return readArray(a, v.VT&^VTArray, depth+1)
+	}
 	switch v.VT {
-	case 0, 1:
+	case VTEmpty, VTNull:
 		return nil, nil
-	case 2, 3, 4, 5, 17, 18, 19, 20, 21, 22, 23:
+	case VTI2, VTI4, VTR4, VTR8, VTUI1, VTUI2, VTUI4, VTI8, VTUI8, VTInt, VTUint:
 		return v.VarUnion.GetValue(), nil
-	case 8:
+	case VTDate:
+		value, ok := v.VarUnion.GetValue().(float64)
+		if !ok {
+			return nil, errors.New("invalid VARIANT_DATE")
+		}
+		return automationDate(value)
+	case VTCY:
+		value, ok := v.VarUnion.GetValue().(*oaut.Currency)
+		if !ok || value == nil {
+			return nil, errors.New("invalid VARIANT_CY")
+		}
+		return Currency(value.Int64), nil
+	case VTDecimal:
+		value, ok := v.VarUnion.GetValue().(*oaut.Decimal)
+		if !ok || value == nil || value.Scale > 28 || (value.Sign != 0 && value.Sign != 0x80) {
+			return nil, errors.New("invalid VARIANT_DECIMAL")
+		}
+		return Decimal{
+			Hi:       value.Hi32,
+			Lo:       value.Lo64,
+			Scale:    value.Scale,
+			Negative: value.Sign == 0x80,
+		}, nil
+	case VTError:
+		value, ok := v.VarUnion.GetValue().(int32)
+		if !ok {
+			return nil, errors.New("invalid VARIANT_ERROR")
+		}
+		return ErrorCode(uint32(value)), nil
+	case VTBSTR:
 		value, ok := v.VarUnion.GetValue().(*oaut.String)
 		if !ok {
-			return nil, fmt.Errorf("invalid VARIANT_BSTR")
+			return nil, errors.New("invalid VARIANT_BSTR")
 		}
 		if value == nil {
 			return "", nil
 		}
 		return value.Data, nil
-	case 16:
+	case VTI1:
 		value, ok := v.VarUnion.GetValue().(uint8)
 		if !ok {
-			return nil, fmt.Errorf("invalid VARIANT_I1")
+			return nil, errors.New("invalid VARIANT_I1")
 		}
 		return int8(value), nil
-	case 11:
+	case VTBool:
 		value, ok := v.VarUnion.GetValue().(int16)
 		if !ok {
-			return nil, fmt.Errorf("invalid VARIANT_BOOL")
+			return nil, errors.New("invalid VARIANT_BOOL")
 		}
 		return value != 0, nil
 	default:

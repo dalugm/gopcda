@@ -12,7 +12,7 @@ import (
 	opcda "github.com/dalugm/gopcda"
 )
 
-const usage = "usage: opcda resolve PROGID | status | browse | read ITEM_ID | write ITEM_ID VALUE [TYPE] | poll ITEM_FILE INTERVAL [CYCLES] [cache|device]\nConnection: OPCDA_HOST, OPCDA_CLSID or OPCDA_PROGID, OPCDA_DOMAIN, OPCDA_USERNAME, OPCDA_PASSWORD\nResolve uses the positional ProgID and ignores OPCDA_CLSID and OPCDA_PROGID.\nOptional: OPCDA_TIMEOUT=180s\nWrite types: bool, int8/16/32/64, uint8/16/32/64, float32 (default), float64, string"
+const usage = "usage: opcda resolve PROGID | status | browse | read ITEM_ID | write ITEM_ID VALUE [TYPE] | poll ITEM_FILE INTERVAL [CYCLES] [cache|device]\nConnection: OPCDA_HOST, OPCDA_CLSID or OPCDA_PROGID, OPCDA_DOMAIN, OPCDA_USERNAME, OPCDA_PASSWORD\nResolve uses the positional ProgID and ignores OPCDA_CLSID and OPCDA_PROGID.\nOptional: OPCDA_TIMEOUT=180s\nWrite types: bool, int8/16/32/64, uint8/16/32/64, float32 (default), float64, string, date, currency, decimal, error, int, uint, empty, null"
 
 type server interface {
 	GetServerStatusContext(context.Context) (*opcda.ServerStatus, error)

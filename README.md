@@ -3,7 +3,7 @@
 A high-level, pure Go OPC DA 2 client built on
 [go-opcda](https://github.com/oiweiwei/go-opcda) bindings and
 [go-msrpc](https://github.com/oiweiwei/go-msrpc) RPC/DCOM transport.
-Browse items, read values, and write scalars through DCOM without a Windows COM
+Browse items, read values, and write values through DCOM without a Windows COM
 runtime or a sidecar.
 
 Early-stage library: the API may change. **Synchronous operations only;
@@ -98,7 +98,44 @@ create it with `AddGroupContext`, register ItemIDs once with `AddItems`, then ca
   `RemoveItems` to unregister items without deleting server points.
 
 See the [usage guide](docs/usage.md) for complete examples, batch behavior, errors,
-supported scalar types, CLI commands, and development checks.
+supported value types, CLI commands, and development checks.
+
+## Value types
+
+The following mappings apply to item reads and writes. Named
+constants such as `opcda.VTR8`, `opcda.VTArray` and `opcda.VTByRef` match the
+Automation definitions; tests check their values against the upstream bindings.
+
+| Automation type | Code | Go read value | Go write input |
+| --- | --- | --- | --- |
+| `VT_EMPTY` | `0x0000` | `nil` | `Variant{Type: VTEmpty}` |
+| `VT_NULL` | `0x0001` | `nil` | `Variant{Type: VTNull}` |
+| `VT_I1` / `VT_UI1` | `0x0010` / `0x0011` | `int8` / `uint8` | Same |
+| `VT_I2` / `VT_UI2` | `0x0002` / `0x0012` | `int16` / `uint16` | Same |
+| `VT_I4` / `VT_UI4` | `0x0003` / `0x0013` | `int32` / `uint32` | Same |
+| `VT_I8` / `VT_UI8` | `0x0014` / `0x0015` | `int64` / `uint64` | Same |
+| `VT_INT` / `VT_UINT` | `0x0016` / `0x0017` | `int32` / `uint32` | `Variant{Type: VTInt, Value: int32(n)}` / `Variant{Type: VTUint, Value: uint32(n)}` |
+| `VT_R4` / `VT_R8` | `0x0004` / `0x0005` | `float32` / `float64` | Same; finite values only |
+| `VT_CY` | `0x0006` | `Currency` (scaled `int64`, units of 1/10000) | Same |
+| `VT_DATE` | `0x0007` | `time.Time` (milliseconds, UTC convention) | `time.Time` |
+| `VT_BSTR` | `0x0008` | `string` | UTF-8 `string`, encoded as UTF-16 |
+| `VT_ERROR` | `0x000A` | `ErrorCode` (`uint32` data, not `error`) | Same |
+| `VT_BOOL` | `0x000B` | `bool` | Same |
+| `VT_DECIMAL` | `0x000E` | `Decimal` (96-bit coefficient, sign, scale) | Same |
+| `VT_ARRAY \| T` | `0x2000 \| T` | `Array` (element type, bounds, flat values) | Same |
+| `VT_BYREF \| T` | `0x4000 \| T` | `Variant` retaining the type tag and value | Same |
+| `VT_VARIANT` | `0x000C` | `Variant` inside a VARIANT array or BYREF wrapper | Same contexts; not a standalone scalar |
+| `VT_DISPATCH` / `VT_UNKNOWN` / `VT_RECORD` | `0x0009` / `0x000D` / `0x0024` | Per-item unsupported-value error | Not supported |
+
+Types and constants in the table belong to `opcda`, except standard Go types.
+Currency/Decimal JSON values are exact decimal strings. Arrays retain lower
+bounds and dimensions; native DECIMAL arrays use VARIANT elements instead.
+Ordinary EMPTY/NULL reads both return nil; their tags remain distinct inside
+VARIANT arrays and BYREF values. Other VARENUM entries used only in type
+descriptions or property sets are not OPC DA VARIANT data types.
+
+See [value details and examples](docs/usage.md#value-types) for array ordering,
+DATE timezone semantics and CLI input formats.
 
 ## Important contracts
 
@@ -113,12 +150,16 @@ supported scalar types, CLI commands, and development checks.
 
 ## Limitations
 
-No subscriptions, array values, DATE conversion, DA3 or hierarchical browsing,
+Standard scalar values, exact currency/decimal values, DATE, SAFEARRAYs and
+BYREF values are supported. See [value types](docs/usage.md#value-types) for
+representations, array bounds and write examples. DATE carries no timezone;
+UTC is a representation convention, not inferred from the server.
+
+No COM object values (`VT_UNKNOWN`/`VT_DISPATCH`), custom records (`VT_RECORD`),
+subscriptions, DA3 or hierarchical browsing,
 or cross-exporter enumeration. Use complete server ItemIDs; suffixes are not inferred.
 
-Field validation is limited to short SUPCON runs, mainly browsing and reads.
-Batch writes and several scalar types have offline tests only. Intermittent
-activation failures were observed; this is not a production-reliability guarantee.
+This project is under active development and may still contain undiscovered issues.
 See [validation details](docs/usage.md#compatibility-and-limitations) and
 [security notes](SECURITY.md).
 
@@ -133,8 +174,8 @@ remain responsible for routing each call.
 The adapters interpret HRESULTs in this library, preserving successful results
 when an operation reports partial success (`S_FALSE`). Small compatibility
 codecs remain where generated bindings cannot express existing contracts:
-length-counted BSTRs, optional group-state fields and strict response-array
-validation. UTF-16 strings use the upstream NDR codec.
+length-counted BSTR reads, BYREF values, optional group-state fields and strict
+VARIANT/array validation. UTF-16 strings use the upstream NDR codec.
 
 ## License
 

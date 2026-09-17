@@ -16,11 +16,11 @@ import (
 // ReadItem reads one full ItemID from the device using OPC DA 2 synchronous IO.
 // It creates a temporary group and removes it before returning. Bad/uncertain
 // quality is returned unchanged: callers must check QualityIsGood(result.Quality).
-// Scalar numeric and boolean values are supported; unsupported VARIANT types
-// return an error. No point values are written.
+// Standard scalar, Array and BYREF Variant values are supported; unsupported
+// VARIANT types return an error. No point values are written.
 func (s *Server) ReadItem(ctx context.Context, itemID string) (*ReadResult, error) {
 	if itemID == "" || strings.ContainsRune(itemID, 0) {
-		return nil, fmt.Errorf("opcda: ItemID must be nonempty and contain no NUL")
+		return nil, errors.New("opcda: ItemID must be nonempty and contain no NUL")
 	}
 	ctx, done := s.operationContext(ctx)
 	defer done()
@@ -73,7 +73,7 @@ func (c *dcomConn) withSingleItem(
 		return err
 	}
 	if c.remoteUnknown == nil || c.remoteUnknown.UUID().Equals(&uuid.UUID{}) {
-		return fmt.Errorf("activation omitted IRemUnknown")
+		return errors.New("activation omitted IRemUnknown")
 	}
 	remoteConn, err := c.bindObjectInterface(ctx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
 	if err != nil {
@@ -140,7 +140,7 @@ func (c *dcomConn) withSingleItem(
 		return fmt.Errorf("AddGroup interface: %w", err)
 	}
 	if itemRef.OXID != c.serverOXID {
-		return fmt.Errorf("group uses a different object exporter")
+		return errors.New("group uses a different object exporter")
 	}
 	refs = append(
 		refs,
@@ -184,14 +184,14 @@ func (c *dcomConn) withSingleItem(
 		return fmt.Errorf("QueryInterface IOPCSyncIO: %w", err)
 	}
 	if len(qi.QueryInterfaceResults) != 1 || qi.QueryInterfaceResults[0] == nil {
-		return fmt.Errorf("missing IOPCSyncIO result")
+		return errors.New("missing IOPCSyncIO result")
 	}
 	q := qi.QueryInterfaceResults[0]
 	if q.HResult != 0 {
 		return hresultError("IOPCSyncIO", "", q.HResult)
 	}
 	if q.Std == nil || q.Std.IPID == nil {
-		return fmt.Errorf("missing IOPCSyncIO IPID")
+		return errors.New("missing IOPCSyncIO IPID")
 	}
 	refs = append(
 		refs,

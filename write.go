@@ -2,6 +2,7 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,14 +11,14 @@ import (
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
 )
 
-// WriteItem synchronously writes a scalar value to one full ItemID using a
+// WriteItem synchronously writes a value to one full ItemID using a
 // temporary DA2 group. See the supported type mapping in README.
 // A nil error means the server acknowledged the write and cleanup succeeded;
 // it does not verify the physical process value. Writes are never retried.
 // An error after sending the request does not imply the value was unchanged.
 func (s *Server) WriteItem(ctx context.Context, id string, value any) error {
 	if id == "" || strings.ContainsRune(id, 0) {
-		return fmt.Errorf("opcda: ItemID must be nonempty and contain no NUL")
+		return errors.New("opcda: ItemID must be nonempty and contain no NUL")
 	}
 	if _, err := writeVariant(value); err != nil {
 		return err

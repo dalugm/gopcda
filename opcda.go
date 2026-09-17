@@ -2,7 +2,7 @@
 // go-opcda bindings and go-msrpc for cross-platform, pure-Go DCOM transport.
 //
 // Connect creates a server session. Reuse a Group for periodic batch reads and
-// on-demand scalar writes. The cmd tools are optional and are not used by the library.
+// on-demand writes. The cmd tools are optional and are not used by the library.
 package opcda
 
 import "fmt"
@@ -49,7 +49,7 @@ func (c ServerConfig) String() string {
 // DataValue holds a single OPC item's value, quality, and timestamps.
 type DataValue struct {
 	ItemID            string
-	Value             any // Numeric scalars (including uint64), bool, or nil; conversion depends on the read API.
+	Value             any // Standard scalars, time.Time, Currency, Decimal, ErrorCode, Array, Variant, or nil.
 	Quality           int16
 	TimestampMs       int64 // OPC DA server timestamp (from cache)
 	SourceTimestampMs int64 // Server-provided timestamp; not proof of independent device sampling.
