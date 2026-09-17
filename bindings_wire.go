@@ -2,6 +2,7 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
@@ -9,32 +10,17 @@ import (
 	binding "github.com/oiweiwei/go-opcda/opc/opcda"
 )
 
-// bindingsWriter preserves gopcda's length-counted BSTR and UTF-16 string
-// contracts while generated OPC bindings own operation and array layouts.
-// go-msrpc v1.5.4 treats an empty BSTR as null and counts UTF-8 bytes for
-// NDR strings. Keep these overrides local until upstream supports them.
+// bindingsWriter preserves gopcda's value contracts in deferred VARIANTs
+// while generated OPC bindings own operation and array layouts.
+// NDR strings use the upstream codec.
 type bindingsWriter struct{ ndr.Writer }
 
 func (w bindingsWriter) WritePointer(ptr ndr.Pointer, bodies ...ndr.Marshaler) error {
-	switch value := ptr.(type) {
-	case **oaut.Variant:
+	if value, ok := ptr.(**oaut.Variant); ok {
 		return w.Writer.WritePointer(
 			ptr,
 			ndr.MarshalNDRFunc(func(ctx context.Context, target ndr.Writer) error {
 				return marshalWriteVariant(ctx, target, *value)
-			}),
-		)
-	case *string:
-		return w.Writer.WritePointer(
-			ptr,
-			ndr.MarshalNDRFunc(func(_ context.Context, target ndr.Writer) error {
-				text := *value
-				// A single terminator requests an empty, non-null access path from
-				// the generated ItemDefinition marshaler.
-				if text == "\x00" {
-					text = ""
-				}
-				return writeUTF16String(target, text)
 			}),
 		)
 	}
@@ -87,7 +73,7 @@ func (r bindingsReader) ReadPointer(
 				// The generated decoder substitutes BlobSize for a zero wire
 				// count. Reject that fallback rather than accepting malformed data.
 				if uint64(len(*blob)) != wire.count {
-					return fmt.Errorf("invalid item blob length")
+					return errors.New("invalid item blob length")
 				}
 				return nil
 			}

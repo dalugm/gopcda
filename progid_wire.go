@@ -3,7 +3,6 @@ package opcda
 import (
 	"context"
 	"fmt"
-	"unicode/utf16"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dtyp"
 	"github.com/oiweiwei/go-msrpc/ndr"
@@ -13,27 +12,10 @@ import (
 type progIDRequest struct{ progID string }
 
 func (r *progIDRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	units := utf16.Encode([]rune(r.progID))
 	return (&iopcserverlist.ClassIDFromProgrammaticIDRequest{
 		This:           orpcThis(),
 		ProgrammaticID: r.progID,
-	}).MarshalNDR(ctx, &progIDWriter{Writer: w, units: uint64(len(units) + 1)})
-}
-
-// progIDWriter corrects go-msrpc v1.5.4's UTF16NLen byte-based count while
-// leaving the generated CLSIDFromProgID operation layout in control.
-type progIDWriter struct {
-	ndr.Writer
-	units uint64
-	size  int
-}
-
-func (w *progIDWriter) WriteSize(size uint64) error {
-	if w.size == 0 || w.size == 2 {
-		size = w.units
-	}
-	w.size++
-	return w.Writer.WriteSize(size)
+	}).MarshalNDR(ctx, w)
 }
 
 type progIDResponse struct {

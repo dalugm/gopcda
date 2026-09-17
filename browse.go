@@ -54,17 +54,17 @@ func collectItemIDs(
 			return nil, err
 		}
 		if batch == nil {
-			return nil, fmt.Errorf("IEnumString: missing response")
+			return nil, errors.New("IEnumString: missing response")
 		}
 		if batch.hresult != 0 && batch.hresult != 1 {
 			return nil, hresultError("IEnumString", "", batch.hresult)
 		}
 		if batch.fetched != uint32(len(batch.values)) {
-			return nil, fmt.Errorf("IEnumString: inconsistent fetched count")
+			return nil, errors.New("IEnumString: inconsistent fetched count")
 		}
 		for _, id := range batch.values {
 			if id == "" {
-				return nil, fmt.Errorf("IEnumString: empty ItemID")
+				return nil, errors.New("IEnumString: empty ItemID")
 			}
 			seen[id] = struct{}{}
 		}
@@ -73,7 +73,7 @@ func collectItemIDs(
 			break
 		}
 		if batch.fetched == 0 {
-			return nil, fmt.Errorf("IEnumString: enumeration made no progress")
+			return nil, errors.New("IEnumString: enumeration made no progress")
 		}
 	}
 	ids := make([]string, 0, len(seen))
@@ -121,7 +121,7 @@ func (c *dcomConn) browseItemIDs(ctx context.Context) (ids []string, retErr erro
 		return nil, err
 	}
 	if c.remoteUnknown == nil || c.remoteUnknown.UUID().Equals(&uuid.UUID{}) {
-		return nil, fmt.Errorf("activation omitted IRemUnknown IPID")
+		return nil, errors.New("activation omitted IRemUnknown IPID")
 	}
 	remoteConn, err := c.bindObjectInterface(ctx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
 	if err != nil {
@@ -147,14 +147,14 @@ func (c *dcomConn) browseItemIDs(ctx context.Context) (ids []string, retErr erro
 		return nil, fmt.Errorf("QueryInterface DA2 browse: %w", err)
 	}
 	if len(qi.QueryInterfaceResults) != 1 || qi.QueryInterfaceResults[0] == nil {
-		return nil, fmt.Errorf("QueryInterface DA2 browse: missing result")
+		return nil, errors.New("QueryInterface DA2 browse: missing result")
 	}
 	result := qi.QueryInterfaceResults[0]
 	if result.HResult != 0 {
 		return nil, hresultError("DA2 browse unavailable", "", result.HResult)
 	}
 	if result.Std == nil || result.Std.IPID == nil {
-		return nil, fmt.Errorf("DA2 browse: missing object reference")
+		return nil, errors.New("DA2 browse: missing object reference")
 	}
 	refs := []*dcom.RemoteInterfaceReference{
 		{IPID: result.Std.IPID, PublicReferencesCount: result.Std.PublicReferencesCount},
@@ -234,7 +234,7 @@ func decodeStandardReference(
 	iid *uuid.UUID,
 ) (*dcom.StdObjectReference, error) {
 	if p == nil {
-		return nil, fmt.Errorf("null interface pointer")
+		return nil, errors.New("null interface pointer")
 	}
 	obj := &dcom.ObjectReference{}
 	if err := ndr.Unmarshal(p.Data, obj, ndr.Opaque); err != nil {
@@ -243,12 +243,12 @@ func decodeStandardReference(
 	if string(obj.Signature) != "MEOW" || obj.Flags != 1 || obj.IID == nil ||
 		!obj.IID.GUID().UUID().Equals(iid) ||
 		obj.ObjectReference == nil {
-		return nil, fmt.Errorf("unexpected OBJREF signature, type or IID")
+		return nil, errors.New("unexpected OBJREF signature, type or IID")
 	}
 	ref, ok := obj.ObjectReference.GetValue().(*dcom.ObjectReferenceStandard)
 	if !ok || ref == nil || ref.Std == nil || ref.Std.IPID == nil ||
 		ref.Std.IPID.UUID().Equals(&uuid.UUID{}) {
-		return nil, fmt.Errorf("missing standard IPID")
+		return nil, errors.New("missing standard IPID")
 	}
 	return ref.Std, nil
 }

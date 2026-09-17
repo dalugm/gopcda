@@ -24,17 +24,17 @@ type pollConfig struct {
 
 func parsePoll(args []string) (*pollConfig, error) {
 	if len(args) < 3 || len(args) > 5 {
-		return nil, fmt.Errorf("usage: opcda poll ITEM_FILE INTERVAL [CYCLES] [cache|device]")
+		return nil, errors.New("usage: opcda poll ITEM_FILE INTERVAL [CYCLES] [cache|device]")
 	}
 	interval, err := time.ParseDuration(args[2])
 	if err != nil || interval < time.Millisecond || interval > time.Hour {
-		return nil, fmt.Errorf("poll interval must be between 1ms and 1h")
+		return nil, errors.New("poll interval must be between 1ms and 1h")
 	}
 	cycles := 20
 	if len(args) >= 4 {
 		cycles, err = strconv.Atoi(args[3])
 		if err != nil || cycles < 1 {
-			return nil, fmt.Errorf("poll cycles must be positive")
+			return nil, errors.New("poll cycles must be positive")
 		}
 	}
 	cache := true
@@ -44,7 +44,7 @@ func parsePoll(args []string) (*pollConfig, error) {
 		case "device":
 			cache = false
 		default:
-			return nil, fmt.Errorf("poll source must be cache or device")
+			return nil, errors.New("poll source must be cache or device")
 		}
 	}
 	data, err := os.ReadFile(args[1])
@@ -61,7 +61,7 @@ func parsePoll(args []string) (*pollConfig, error) {
 		}
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("item file is empty")
+		return nil, errors.New("item file is empty")
 	}
 	return &pollConfig{ids: ids, interval: interval, cycles: cycles, cache: cache}, nil
 }

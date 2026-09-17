@@ -82,7 +82,7 @@ func (c *dcomConn) addGroup(
 		deadband < 0 ||
 		deadband > 100 ||
 		strings.ContainsRune(name, 0) {
-		return nil, fmt.Errorf("invalid group name, update rate or deadband")
+		return nil, errors.New("invalid group name, update rate or deadband")
 	}
 	c.groupsMu.Lock()
 	if c.closed {
@@ -135,7 +135,7 @@ func (c *dcomConn) openPersistentGroup(
 		}
 	}()
 	if c.remoteUnknown == nil {
-		return g, fmt.Errorf("activation omitted IRemUnknown")
+		return g, errors.New("activation omitted IRemUnknown")
 	}
 	var err error
 	g.remConn, err = c.bindObjectInterface(g.bindCtx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
@@ -183,7 +183,7 @@ func (c *dcomConn) openPersistentGroup(
 	g.itemIPID = ref.IPID
 	g.oid = ref.OID
 	if ref.OXID != c.serverOXID {
-		return g, fmt.Errorf("group belongs to another object exporter")
+		return g, errors.New("group belongs to another object exporter")
 	}
 	qi, err := g.remoteClient.RemoteQueryInterface(
 		ctx,
@@ -199,7 +199,7 @@ func (c *dcomConn) openPersistentGroup(
 		return g, err
 	}
 	if len(qi.QueryInterfaceResults) != 2 {
-		return g, fmt.Errorf("missing group interface results")
+		return g, errors.New("missing group interface results")
 	}
 	for _, q := range qi.QueryInterfaceResults {
 		if q != nil && q.HResult == 0 && q.Std != nil && q.Std.IPID != nil {
@@ -217,7 +217,7 @@ func (c *dcomConn) openPersistentGroup(
 			return g, hresultError("QueryInterface group", "", q.HResult)
 		}
 		if q == nil || q.Std == nil || q.Std.IPID == nil {
-			return g, fmt.Errorf("IOPCSyncIO or IOPCGroupStateMgt unavailable")
+			return g, errors.New("IOPCSyncIO or IOPCGroupStateMgt unavailable")
 		}
 	}
 	g.syncIPID = qi.QueryInterfaceResults[0].Std.IPID

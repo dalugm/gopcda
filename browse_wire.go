@@ -2,6 +2,7 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
@@ -71,13 +72,13 @@ func (r *enumNextResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error
 	}
 	r.values, r.fetched, r.hresult = resp.Entries, resp.Fetched, resp.Return
 	if r.fetched != uint32(len(r.values)) || r.fetched > r.requested {
-		return fmt.Errorf("IEnumString: fetched count does not match array")
+		return errors.New("IEnumString: fetched count does not match array")
 	}
 	if r.hresult == 0 && r.fetched != r.requested {
-		return fmt.Errorf("IEnumString: S_OK without a full batch")
+		return errors.New("IEnumString: S_OK without a full batch")
 	}
 	if r.hresult == 1 && r.fetched >= r.requested {
-		return fmt.Errorf("IEnumString: S_FALSE without a partial batch")
+		return errors.New("IEnumString: S_FALSE without a partial batch")
 	}
 	return nil
 }

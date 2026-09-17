@@ -2,6 +2,7 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
@@ -59,7 +60,7 @@ func (c *dcomConn) removeItems(
 			err = hresultError("RemoveItems", "", r.hresult)
 		}
 		if err == nil && len(r.errors) != len(chunk) {
-			err = fmt.Errorf("RemoveItems: missing result array")
+			err = errors.New("RemoveItems: missing result array")
 		}
 		if err != nil {
 			for _, id := range pending[start:] {

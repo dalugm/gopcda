@@ -48,21 +48,6 @@ func marshalWriteVariant(ctx context.Context, w ndr.Writer, v *oaut.Variant) err
 	return w.WriteDeferred()
 }
 
-func writeUTF16String(w ndr.Writer, text string) error {
-	units := append(utf16.Encode([]rune(text)), 0)
-	for _, size := range []uint64{uint64(len(units)), 0, uint64(len(units))} {
-		if err := w.WriteSize(size); err != nil {
-			return err
-		}
-	}
-	for _, unit := range units {
-		if err := w.WriteData(unit); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // unmarshalReadVariant keeps BSTRs length-counted, including trailing NULs.
 func unmarshalReadVariant(ctx context.Context, r ndr.Reader, v *oaut.Variant) error {
 	*v = oaut.Variant{VarUnion: &oaut.Variant_VarUnion{}}

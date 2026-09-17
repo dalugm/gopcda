@@ -48,7 +48,7 @@ func resolveProgID(
 	}
 	if strings.TrimSpace(progID) == "" || strings.ContainsRune(progID, 0) ||
 		!utf8.ValidString(progID) {
-		return "", fmt.Errorf("invalid ProgID")
+		return "", errors.New("invalid ProgID")
 	}
 	cfg.CLSID, cfg.ProgID = opcEnumCLSID, ""
 	conn, err := open(ctx, cfg)
@@ -93,7 +93,7 @@ func resolveServerConfig(
 		return cfg, nil
 	}
 	if cfg.ProgID == "" {
-		return cfg, fmt.Errorf("dcom: CLSID or ProgID is required")
+		return cfg, errors.New("dcom: CLSID or ProgID is required")
 	}
 	id, err := resolve(ctx, cfg, cfg.ProgID)
 	if err != nil {

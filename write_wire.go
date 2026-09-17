@@ -2,7 +2,7 @@ package opcda
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
 	"github.com/oiweiwei/go-msrpc/ndr"
@@ -44,7 +44,7 @@ func (r *writeOneResponse) check() error {
 		return hresultError("Write", "", r.hresult)
 	}
 	if !r.hasError {
-		return unknownWrite(fmt.Errorf("Write: missing item HRESULT"))
+		return unknownWrite(errors.New("Write: missing item HRESULT"))
 	}
 	if r.itemError < 0 {
 		return hresultError("Write", "", r.itemError)

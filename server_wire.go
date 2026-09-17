@@ -2,9 +2,9 @@ package opcda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
-	"unicode/utf16"
 
 	dcom "github.com/oiweiwei/go-msrpc/msrpc/dcom"
 	"github.com/oiweiwei/go-msrpc/ndr"
@@ -60,28 +60,17 @@ func (r *addGroupReq) MarshalNDR(ctx context.Context, w ndr.Writer) error {
 	}
 	return request.MarshalNDR(ctx, &addGroupBindingsWriter{
 		bindingsWriter:      bindingsWriter{w},
-		nameUnits:           uint64(len(utf16.Encode([]rune(r.Name))) + 1),
 		nullTimeBias:        r.TimeBias == nil,
 		nullPercentDeadband: r.PercentDeadband == nil,
 	})
 }
 
-// AddGroup's generated name count is byte-based, and its scalar fields cannot
-// express null unique pointers. Correct only those fields for this request.
+// AddGroup's generated scalar fields cannot express null unique pointers.
+// Preserve the caller's optional time bias and deadband for this request.
 type addGroupBindingsWriter struct {
 	bindingsWriter
-	nameUnits           uint64
-	nameSize            int
 	nullTimeBias        bool
 	nullPercentDeadband bool
-}
-
-func (w *addGroupBindingsWriter) WriteSize(size uint64) error {
-	if w.nameSize == 0 || w.nameSize == 2 {
-		size = w.nameUnits
-	}
-	w.nameSize++
-	return w.Writer.WriteSize(size)
 }
 
 func (w *addGroupBindingsWriter) WritePointer(ptr ndr.Pointer, bodies ...ndr.Marshaler) error {
@@ -204,7 +193,7 @@ func (r *getStatusResp) serverStatus() (*ServerStatus, error) {
 		return nil, hresultError("GetStatus", "", r.Return)
 	}
 	if r.StatusData == nil {
-		return nil, fmt.Errorf("GetStatus: successful response contains null status")
+		return nil, errors.New("GetStatus: successful response contains null status")
 	}
 	s := r.StatusData
 	filetime := func(i int) time.Time {

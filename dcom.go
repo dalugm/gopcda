@@ -127,7 +127,7 @@ func activateDCOM(
 		return nil, hresultError("RemoteActivation", "", resp.HResult)
 	}
 	if len(resp.InterfaceData) == 0 || resp.InterfaceData[0] == nil {
-		return nil, fmt.Errorf("dcom: activation returned no interface data")
+		return nil, errors.New("dcom: activation returned no interface data")
 	}
 	if len(resp.Results) > 0 && resp.Results[0] != 0 {
 		return nil, hresultError("RemoteActivation interface", "", resp.Results[0])
@@ -206,7 +206,7 @@ func parseGUID(s string) (*dtyp.GUID, error) {
 		return nil, err
 	}
 	if u.Equals(&uuid.UUID{}) {
-		return nil, fmt.Errorf("CLSID must not be zero")
+		return nil, errors.New("CLSID must not be zero")
 	}
 	return dtyp.GUIDFromUUID(u), nil
 }
@@ -214,7 +214,7 @@ func parseGUID(s string) (*dtyp.GUID, error) {
 func extractTCPPort(bindings *dcom.DualStringArray) (string, error) {
 	if bindings == nil || bindings.SecurityOffset == 0 ||
 		int(bindings.SecurityOffset) > len(bindings.StringArray) {
-		return "", fmt.Errorf("missing or invalid string bindings")
+		return "", errors.New("missing or invalid string bindings")
 	}
 	sa := bindings.StringArray[:bindings.SecurityOffset]
 	for i := 0; i < len(sa) && sa[i] != 0; {
@@ -225,7 +225,7 @@ func extractTCPPort(bindings *dcom.DualStringArray) (string, error) {
 			i++
 		}
 		if i == len(sa) {
-			return "", fmt.Errorf("unterminated string binding")
+			return "", errors.New("unterminated string binding")
 		}
 		address := string(utf16.Decode(sa[start:i]))
 		i++
@@ -242,7 +242,7 @@ func extractTCPPort(bindings *dcom.DualStringArray) (string, error) {
 			return strconv.FormatUint(n, 10), nil
 		}
 	}
-	return "", fmt.Errorf("no usable TCP object endpoint in activation bindings")
+	return "", errors.New("no usable TCP object endpoint in activation bindings")
 }
 
 var (

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -28,7 +27,7 @@ func (c *dcomConn) addItems(ctx context.Context, handle int, ids []string) ([]*I
 	for i, id := range ids {
 		out[i] = &Item{ItemID: id}
 		if id == "" || strings.ContainsRune(id, 0) {
-			out[i].Error = fmt.Errorf("invalid ItemID")
+			out[i].Error = errors.New("invalid ItemID")
 			continue
 		}
 		if v, ok := g.items[id]; ok {
@@ -39,14 +38,14 @@ func (c *dcomConn) addItems(ctx context.Context, handle int, ids []string) ([]*I
 			pending = append(pending, id)
 		}
 		positions[id] = append(positions[id], i)
-		out[i].Error = fmt.Errorf("item not added")
+		out[i].Error = errors.New("item not added")
 	}
 	for start := 0; start < len(pending); start += maxBatchItems {
 		chunk := pending[start:min(start+maxBatchItems, len(pending))]
 		clients := make([]uint32, len(chunk))
 		for i := range chunk {
 			if g.nextClientHandle == math.MaxUint32 {
-				return out, fmt.Errorf("client handle range exhausted")
+				return out, errors.New("client handle range exhausted")
 			}
 			g.nextClientHandle++
 			clients[i] = g.nextClientHandle
@@ -68,7 +67,7 @@ func (c *dcomConn) addItems(ctx context.Context, handle int, ids []string) ([]*I
 			return out, hresultError("AddItems", "", r.hresult)
 		}
 		if len(r.items) != len(chunk) || len(r.errors) != len(chunk) {
-			return out, fmt.Errorf("AddItems: missing result arrays")
+			return out, errors.New("AddItems: missing result arrays")
 		}
 		for i, id := range chunk {
 			if r.errors[i] < 0 {
@@ -269,7 +268,7 @@ func (c *dcomConn) write(
 			return result, err
 		}
 		if len(r.errors) != end-start {
-			err = unknownWrite(fmt.Errorf("Write: missing item results"))
+			err = unknownWrite(errors.New("Write: missing item results"))
 			for _, id := range known[start:end] {
 				result[id] = err
 			}

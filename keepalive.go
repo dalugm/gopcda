@@ -127,7 +127,7 @@ func (p *objectPinger) add(ctx context.Context, oid uint64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if oid == 0 {
-		return fmt.Errorf("missing OID for keepalive")
+		return errors.New("missing OID for keepalive")
 	}
 	if err := p.healthError(); err != nil {
 		return err
@@ -282,10 +282,10 @@ func (c *dcomConn) releaseServerReference(ctx context.Context) error {
 		return nil
 	}
 	if c.remoteUnknown == nil || c.remoteUnknown.UUID().Equals(&uuid.UUID{}) {
-		return fmt.Errorf("activation omitted IRemUnknown IPID for release")
+		return errors.New("activation omitted IRemUnknown IPID for release")
 	}
 	if c.serverIPID == nil || c.serverIPID.UUID().Equals(&uuid.UUID{}) || c.serverConn == nil {
-		return fmt.Errorf("activation omitted server interface for release")
+		return errors.New("activation omitted server interface for release")
 	}
 	auth := gssapi.NewSecurityContext(
 		ctx,

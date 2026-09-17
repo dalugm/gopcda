@@ -11,7 +11,7 @@ subscriptions and automatic reconnection are not implemented.**
 
 ## Installation
 
-Requires Go 1.27.0 or later.
+Requires Go 1.26.0 or later. Use the latest patch release of a supported Go version.
 
 ```sh
 go get github.com/dalugm/gopcda
@@ -133,8 +133,8 @@ remain responsible for routing each call.
 The adapters interpret HRESULTs in this library, preserving successful results
 when an operation reports partial success (`S_FALSE`). Small compatibility
 codecs remain where generated bindings cannot express existing contracts:
-length-counted BSTRs, UTF-16 string lengths, optional group-state fields and
-strict response-array validation. See [binding compatibility](docs/bindings.md).
+length-counted BSTRs, optional group-state fields and strict response-array
+validation. UTF-16 strings use the upstream NDR codec.
 
 ## License
 

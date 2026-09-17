@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,7 +37,7 @@ func loadConfig(
 		var err error
 		timeout, err = time.ParseDuration(value)
 		if err != nil || timeout <= 0 {
-			return cfg, 0, fmt.Errorf("OPCDA_TIMEOUT must be a positive duration such as 180s")
+			return cfg, 0, errors.New("OPCDA_TIMEOUT must be a positive duration such as 180s")
 		}
 	}
 	return cfg, timeout, nil

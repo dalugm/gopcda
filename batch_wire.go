@@ -2,7 +2,7 @@ package opcda
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
 	"github.com/oiweiwei/go-msrpc/ndr"
@@ -21,7 +21,7 @@ type batchAddRequest struct {
 
 func (r *batchAddRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
 	if len(r.ids) != len(r.clients) {
-		return fmt.Errorf("AddItems: mismatched item and client counts")
+		return errors.New("AddItems: mismatched item and client counts")
 	}
 	items := make([]*binding.ItemDefinition, len(r.ids))
 	for i, id := range r.ids {
@@ -56,10 +56,10 @@ func (r *batchAddResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) error
 		r.items = make([]addOneResponse, len(response.AddResults))
 		for i, item := range response.AddResults {
 			if item == nil {
-				return fmt.Errorf("AddItems: null result")
+				return errors.New("AddItems: null result")
 			}
 			if item.Blob != nil && uint64(len(item.Blob)) != uint64(item.BlobSize) {
-				return fmt.Errorf("invalid item blob length")
+				return errors.New("invalid item blob length")
 			}
 			r.items[i] = addOneResponse{
 				handle:    item.Server,
@@ -105,7 +105,7 @@ func (r *batchReadResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) erro
 		r.states = make([]readOneResponse, len(response.ItemValues))
 		for i, state := range response.ItemValues {
 			if state == nil || state.Timestamp == nil {
-				return fmt.Errorf("Read: missing item state or timestamp")
+				return errors.New("Read: missing item state or timestamp")
 			}
 			r.states[i] = readOneResponse{
 				client:   state.Client,
@@ -125,7 +125,7 @@ func (r *batchReadResponse) results(ids []string) ([]ReadResult, error) {
 		return nil, hresultError("Read", "", r.hresult)
 	}
 	if len(r.errors) != len(ids) || len(r.states) != len(ids) {
-		return nil, fmt.Errorf("Read: missing result arrays")
+		return nil, errors.New("Read: missing result arrays")
 	}
 	out := make([]ReadResult, len(ids))
 	for i, id := range ids {
@@ -150,7 +150,7 @@ type batchWriteRequest struct {
 
 func (r *batchWriteRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
 	if len(r.handles) != len(r.values) {
-		return fmt.Errorf("Write: mismatched handle and value counts")
+		return errors.New("Write: mismatched handle and value counts")
 	}
 	return (&syncio.WriteRequest{This: orpcThis(), Server: r.handles, ItemValues: r.values}).MarshalNDR(
 		ctx,
