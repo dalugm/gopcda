@@ -3,8 +3,8 @@ module github.com/dalugm/gopcda
 go 1.26.0
 
 require (
-	github.com/oiweiwei/go-msrpc v1.6.1
-	github.com/oiweiwei/go-opcda v0.5.0
+	github.com/oiweiwei/go-msrpc v1.6.3
+	github.com/oiweiwei/go-opcda v0.6.0
 )
 
 require (
@@ -24,8 +24,8 @@ require (
 	github.com/oiweiwei/go-smb2.fork v1.0.2 // indirect
 	github.com/oiweiwei/gokrb5.fork/v9 v9.0.8 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
-	golang.org/x/crypto v0.56.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )

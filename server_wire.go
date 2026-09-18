@@ -54,37 +54,15 @@ func (r *addGroupReq) MarshalNDR(ctx context.Context, w ndr.Writer) error {
 	}
 	if r.TimeBias != nil {
 		request.TimeBias = *r.TimeBias
+	} else {
+		request.NullMask |= iopcserver.AddGroupNullMaskTimeBias
 	}
 	if r.PercentDeadband != nil {
 		request.PercentDeadband = *r.PercentDeadband
+	} else {
+		request.NullMask |= iopcserver.AddGroupNullMaskPercentDeadband
 	}
-	return request.MarshalNDR(ctx, &addGroupBindingsWriter{
-		bindingsWriter:      bindingsWriter{w},
-		nullTimeBias:        r.TimeBias == nil,
-		nullPercentDeadband: r.PercentDeadband == nil,
-	})
-}
-
-// AddGroup's generated scalar fields cannot express null unique pointers.
-// Preserve the caller's optional time bias and deadband for this request.
-type addGroupBindingsWriter struct {
-	bindingsWriter
-	nullTimeBias        bool
-	nullPercentDeadband bool
-}
-
-func (w *addGroupBindingsWriter) WritePointer(ptr ndr.Pointer, bodies ...ndr.Marshaler) error {
-	switch ptr.(type) {
-	case *int32:
-		if w.nullTimeBias {
-			return w.Writer.WritePointer(nil)
-		}
-	case *float32:
-		if w.nullPercentDeadband {
-			return w.Writer.WritePointer(nil)
-		}
-	}
-	return w.bindingsWriter.WritePointer(ptr, bodies...)
+	return request.MarshalNDR(ctx, bindingsWriter{w})
 }
 
 func (r *addGroupResp) UnmarshalNDR(ctx context.Context, rd ndr.Reader) error {

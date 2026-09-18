@@ -16,13 +16,6 @@ func orpcThis() *dcom.ORPCThis {
 	return &dcom.ORPCThis{Version: &dcom.COMVersion{MajorVersion: 5, MinorVersion: 7}}
 }
 
-func writeORPC(ctx context.Context, w ndr.Writer) error {
-	if err := orpcThis().MarshalNDR(ctx, w); err != nil {
-		return err
-	}
-	return w.WriteDeferred()
-}
-
 type browseIDsRequest struct{}
 
 func (*browseIDsRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {

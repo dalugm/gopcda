@@ -180,35 +180,19 @@ type groupStateRequest struct {
 	deadband float32
 }
 
-// The generated SetStateRequest represents optional pointers as values and
-// always sends them. Preserve null (no change) for time bias, locale and client
-// handle until the binding exposes pointer presence.
+// SetState uses the generated null mask to leave fields outside this operation
+// unchanged while explicitly updating rate, active and deadband.
 func (r *groupStateRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
-	if err := writeORPC(ctx, w); err != nil {
-		return err
+	request := &statemgt.SetStateRequest{
+		This:                orpcThis(),
+		RequestedUpdateRate: r.rate,
+		Active:              r.active,
+		PercentDeadband:     r.deadband,
+		NullMask: statemgt.SetStateNullMaskTimeBias |
+			statemgt.SetStateNullMaskLCID |
+			statemgt.SetStateNullMaskClientGroup,
 	}
-	active := uint32(0)
-	if r.active {
-		active = 1
-	}
-	for _, value := range []any{r.rate, active, nil, r.deadband, nil, nil} {
-		if value == nil {
-			if err := w.WritePointer(nil); err != nil {
-				return err
-			}
-		} else {
-			body := ndr.MarshalNDRFunc(
-				func(ctx context.Context, w ndr.Writer) error { return w.WriteData(value) },
-			)
-			if err := w.WritePointer(&value, body); err != nil {
-				return err
-			}
-		}
-		if err := w.WriteDeferred(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return request.MarshalNDR(ctx, w)
 }
 
 type groupStateResponse struct {
