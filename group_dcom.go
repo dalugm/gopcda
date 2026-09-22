@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/oiweiwei/go-msrpc/dcerpc"
+	"github.com/oiweiwei/go-msrpc/midl/uuid"
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
 	rem "github.com/oiweiwei/go-msrpc/msrpc/dcom/iremunknown/v0"
 )
@@ -19,6 +20,7 @@ type registeredItem struct {
 type persistentGroup struct {
 	bindCtx                                context.Context
 	bindCancel                             context.CancelFunc
+	remCancel                              context.CancelFunc
 	gate                                   chan struct{}
 	closed                                 bool
 	handle                                 int
@@ -78,6 +80,9 @@ func (c *dcomConn) addGroup(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err := c.keepaliveError(); err != nil {
+		return nil, err
+	}
 	if rate <= 0 || uint64(rate) > math.MaxUint32 || math.IsNaN(float64(deadband)) ||
 		deadband < 0 ||
 		deadband > 100 ||
@@ -92,7 +97,7 @@ func (c *dcomConn) addGroup(
 	c.groupOps.Add(1)
 	c.groupsMu.Unlock()
 	defer c.groupOps.Done()
-	g, err := c.openPersistentGroup(ctx, name, rate, deadband)
+	g, err := c.openPersistentGroup(ctx, name, rate, deadband, c.bindObjectInterface)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +126,7 @@ func (c *dcomConn) openPersistentGroup(
 	name string,
 	rate int64,
 	deadband float32,
+	bind func(context.Context, *uuid.UUID) (dcerpc.Conn, error),
 ) (g *persistentGroup, retErr error) {
 	g = newPersistentGroup()
 	g.bindCtx, g.bindCancel = context.WithCancel(c.rpcCtx)
@@ -138,7 +144,14 @@ func (c *dcomConn) openPersistentGroup(
 		return g, errors.New("activation omitted IRemUnknown")
 	}
 	var err error
-	g.remConn, err = c.bindObjectInterface(g.bindCtx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
+	// RemRelease must remain usable if a later setup call is canceled.
+	g.remConn, g.remCancel, err = bindCleanupTransport(
+		ctx,
+		c.rpcCtx,
+		func(bindCtx context.Context) (dcerpc.Conn, error) {
+			return bind(bindCtx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
+		},
+	)
 	if err != nil {
 		return g, err
 	}
@@ -222,15 +235,15 @@ func (c *dcomConn) openPersistentGroup(
 	}
 	g.syncIPID = qi.QueryInterfaceResults[0].Std.IPID
 	g.stateIPID = qi.QueryInterfaceResults[1].Std.IPID
-	g.itemConn, err = c.bindObjectInterface(g.bindCtx, iopcItemMgtIID.GUID().UUID())
+	g.itemConn, err = bind(g.bindCtx, iopcItemMgtIID.GUID().UUID())
 	if err != nil {
 		return g, err
 	}
-	g.syncConn, err = c.bindObjectInterface(g.bindCtx, iopcSyncIOIID.GUID().UUID())
+	g.syncConn, err = bind(g.bindCtx, iopcSyncIOIID.GUID().UUID())
 	if err != nil {
 		return g, err
 	}
-	g.stateConn, err = c.bindObjectInterface(g.bindCtx, iopcGroupStateMgtIID.GUID().UUID())
+	g.stateConn, err = bind(g.bindCtx, iopcGroupStateMgtIID.GUID().UUID())
 	if err != nil {
 		return g, err
 	}
@@ -247,6 +260,9 @@ func (c *dcomConn) disposeGroup(ctx context.Context, g *persistentGroup, created
 	}
 	if g.bindCancel != nil {
 		defer g.bindCancel()
+	}
+	if g.remCancel != nil {
+		defer g.remCancel()
 	}
 	var errs []error
 	for _, conn := range []dcerpc.Conn{g.stateConn, g.syncConn, g.itemConn} {
@@ -333,6 +349,9 @@ func (c *dcomConn) setGroupActive(
 	}
 	defer g.release()
 	r := &groupStateResponse{}
+	if err := c.keepaliveError(); err != nil {
+		return err
+	}
 	if err := g.stateConn.Invoke(
 		ctx,
 		&opcOp{

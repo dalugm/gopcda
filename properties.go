@@ -50,13 +50,9 @@ func (s *Server) ItemProperties(ctx context.Context, id string) ([]ItemProperty,
 }
 
 func (c *dcomConn) itemProperties(ctx context.Context, id string) (_ []ItemProperty, retErr error) {
-	c.groupsMu.Lock()
-	if c.closed {
-		c.groupsMu.Unlock()
-		return nil, ErrClosed
+	if err := c.beginObjectOperation(); err != nil {
+		return nil, err
 	}
-	c.groupOps.Add(1)
-	c.groupsMu.Unlock()
 	defer c.groupOps.Done()
 	if err := ctx.Err(); err != nil {
 		return nil, err

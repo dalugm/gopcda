@@ -104,6 +104,7 @@ func run() (err error) {
 successful connection does not end the session. Pass an operation context to each
 call and always close the server with `Close(ctx)`, checking its cleanup error.
 Use a fresh cleanup context if the operation context has already expired.
+The connection maintains DCOM keepalive even when no persistent group exists.
 
 ## Periodic acquisition
 

@@ -117,16 +117,27 @@ func (c *dcomConn) bindObjectInterface(ctx context.Context, iid *uuid.UUID) (dce
 }
 
 func (c *dcomConn) browseItemIDs(ctx context.Context) (ids []string, retErr error) {
+	if err := c.beginObjectOperation(); err != nil {
+		return nil, err
+	}
+	defer c.groupOps.Done()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if c.remoteUnknown == nil || c.remoteUnknown.UUID().Equals(&uuid.UUID{}) {
 		return nil, errors.New("activation omitted IRemUnknown IPID")
 	}
-	remoteConn, err := c.bindObjectInterface(ctx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
+	remoteConn, cancelRemote, err := bindCleanupTransport(
+		ctx,
+		c.rpcCtx,
+		func(bindCtx context.Context) (dcerpc.Conn, error) {
+			return c.bindObjectInterface(bindCtx, rem.RemoteUnknownSyntaxV0_0.IfUUID)
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("bind IRemUnknown: %w", err)
 	}
+	defer cancelRemote()
 	defer func() { retErr = errors.Join(retErr, closeRPC(remoteConn)) }()
 	remoteClient, err := rem.NewRemoteUnknownClient(ctx, remoteConn, dcerpc.WithNoBind(remoteConn))
 	if err != nil {

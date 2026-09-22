@@ -52,7 +52,16 @@ func dialDCOM(ctx context.Context, cfg ServerConfig) (_ connection, retErr error
 	if err != nil {
 		return nil, err
 	}
-	return activateDCOM(ctx, cfg, iopcServerIID)
+	conn, err := activateDCOM(ctx, cfg, iopcServerIID)
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.startKeepalive(ctx, conn.bindObjectExporter); err != nil {
+		cleanup, cancel := cleanupContext()
+		defer cancel()
+		return nil, errors.Join(fmt.Errorf("server keepalive: %w", err), conn.closeContext(cleanup))
+	}
+	return conn, nil
 }
 
 func activateDCOM(

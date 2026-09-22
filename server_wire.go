@@ -191,6 +191,9 @@ func (r *getStatusResp) serverStatus() (*ServerStatus, error) {
 const getStatusOpnum = 6
 
 func (c *dcomConn) getServerStatus(ctx context.Context) (*ServerStatus, error) {
+	if err := c.keepaliveError(); err != nil {
+		return nil, err
+	}
 	req := &getStatusReq{
 		ORPCThis: &dcom.ORPCThis{Version: &dcom.COMVersion{MajorVersion: 5, MinorVersion: 7}},
 	}

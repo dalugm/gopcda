@@ -71,6 +71,9 @@ reuse. Removal does not delete server points or write device values.
 releases remaining groups and the activated server reference before closing the
 session. Removed groups cannot be reused. Persistent objects are kept alive
 through DCOM ping sets. Cleanup failures are returned, not silently retried.
+Server keepalive starts during connection setup, independently of group creation.
+A failure to establish keepalive fails the connection; later keepalive failures
+are returned by operations so the caller can close the session and reconnect.
 
 ## Writing values
 

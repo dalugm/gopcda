@@ -35,70 +35,79 @@ type objectPinger struct {
 	done      chan struct{}
 }
 
-func (c *dcomConn) retainObject(ctx context.Context, oid uint64, flags uint32) error {
-	if flags&0x1000 != 0 && c.serverFlags&0x1000 != 0 {
-		return nil
+// startKeepalive runs once before publishing the session. Even when the server
+// itself has SORF_NOPING, groups may require pinging on this exporter later.
+func (c *dcomConn) startKeepalive(
+	ctx context.Context,
+	bind func(context.Context) (dcerpc.Conn, error),
+) (retErr error) {
+	conn, cancel, err := bindCleanupTransport(ctx, c.rpcCtx, bind)
+	if err != nil {
+		return err
 	}
-	c.pingMu.Lock()
-	defer c.pingMu.Unlock()
-	if c.pinger == nil {
-		pingCtx, pingCancel := context.WithCancel(c.rpcCtx)
-		initialized := false
-		stopInit := context.AfterFunc(ctx, pingCancel)
-		defer func() {
-			stopInit()
-			if !initialized {
-				pingCancel()
-			}
-		}()
-		auth := gssapi.NewSecurityContext(
-			pingCtx,
-			gssapi.WithCredential(
-				credential.NewFromPassword(c.cfg.Domain+"\\"+c.cfg.Username, c.cfg.Password),
-			),
-			gssapi.WithMechanismFactory(ssp.NTLM),
-		)
-		conn, err := dcerpc.Dial(
-			auth,
-			c.cfg.Host,
-			dcerpc.WithEndpoint("ncacn_ip_tcp:[135]"),
-			dcerpc.WithMechanism(ssp.NTLM),
-		)
-		if err != nil {
+	p := &objectPinger{rpcCancel: cancel, conn: conn, objects: map[uint64]int{}}
+	defer func() {
+		if retErr != nil {
+			cleanup, done := cleanupContext()
+			defer done()
+			retErr = errors.Join(retErr, p.close(cleanup))
+		}
+	}()
+	p.client, err = exporter.NewObjectExporterClient(ctx, conn, dcerpc.WithNoBind(conn))
+	if err != nil {
+		return err
+	}
+	if c.serverFlags&0x1000 == 0 {
+		if err := p.add(ctx, c.serverOID); err != nil {
 			return err
 		}
-		client, err := exporter.NewObjectExporterClient(
-			auth,
-			conn,
-			dcerpc.WithSeal(),
-			dcerpc.WithTargetName(c.cfg.Host),
-		)
-		if err != nil {
-			return errors.Join(err, closeRPC(conn))
-		}
-		p := &objectPinger{
-			rpcCancel: pingCancel,
-			conn:      conn,
-			client:    client,
-			objects:   map[uint64]int{},
-			done:      make(chan struct{}),
-		}
-		if c.serverFlags&0x1000 == 0 {
-			if err := p.add(ctx, c.serverOID); err != nil {
-				return errors.Join(err, closeRPC(conn))
-			}
-		}
-		loop, cancel := context.WithCancel(context.Background())
-		p.cancel = cancel
-		initialized = true
-		c.pinger = p
-		c.pingHealth.Store(p)
-		go p.run(loop)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	loop, loopCancel := context.WithCancel(context.Background())
+	p.cancel = loopCancel
+	p.done = make(chan struct{})
+	c.pinger = p
+	c.pingHealth.Store(p)
+	go p.run(loop)
+	return nil
+}
+
+func (c *dcomConn) bindObjectExporter(ctx context.Context) (dcerpc.Conn, error) {
+	auth := gssapi.NewSecurityContext(
+		ctx,
+		gssapi.WithCredential(
+			credential.NewFromPassword(c.cfg.Domain+"\\"+c.cfg.Username, c.cfg.Password),
+		),
+		gssapi.WithMechanismFactory(ssp.NTLM),
+	)
+	conn, err := dcerpc.Dial(auth, c.cfg.Host,
+		dcerpc.WithEndpoint("ncacn_ip_tcp:[135]"), dcerpc.WithMechanism(ssp.NTLM),
+	)
+	if err != nil {
+		return nil, err
+	}
+	client, err := exporter.NewObjectExporterClient(auth, conn,
+		dcerpc.WithSeal(), dcerpc.WithTargetName(c.cfg.Host),
+	)
+	if err != nil {
+		return nil, errors.Join(err, closeRPC(conn))
+	}
+	return client.Conn(), nil
+}
+
+func (c *dcomConn) retainObject(ctx context.Context, oid uint64, flags uint32) error {
 	if flags&0x1000 != 0 {
 		return nil
 	}
-	return c.pinger.add(ctx, oid)
+	c.pingMu.Lock()
+	p := c.pinger
+	c.pingMu.Unlock()
+	if p == nil {
+		return errors.New("DCOM keepalive is not initialized")
+	}
+	return p.add(ctx, oid)
 }
 
 func (p *objectPinger) change(ctx context.Context, add, del []uint64) error {
@@ -143,8 +152,8 @@ func (p *objectPinger) add(ctx context.Context, oid uint64) error {
 
 func (c *dcomConn) releaseObject(ctx context.Context, oid uint64) error {
 	c.pingMu.Lock()
-	defer c.pingMu.Unlock()
 	p := c.pinger
+	c.pingMu.Unlock()
 	if p == nil {
 		return nil
 	}
@@ -204,11 +213,19 @@ func (c *dcomConn) stopKeepalive(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	p.cancel()
+	return p.close(ctx)
+}
+
+func (p *objectPinger) close(ctx context.Context) error {
+	if p.cancel != nil {
+		p.cancel()
+	}
 	if p.rpcCancel != nil {
 		defer p.rpcCancel()
 	}
-	<-p.done
+	if p.done != nil {
+		<-p.done
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	ids := make([]uint64, 0, len(p.objects))

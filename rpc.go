@@ -69,6 +69,21 @@ func closeRPC(conn dcerpc.Conn) error {
 	return conn.Close(ctx)
 }
 
+// beginObjectOperation reserves the session until the caller finishes remote
+// cleanup and calls groupOps.Done. Admission and Close use the same lock.
+func (c *dcomConn) beginObjectOperation() error {
+	c.groupsMu.Lock()
+	defer c.groupsMu.Unlock()
+	if c.closed {
+		return ErrClosed
+	}
+	if err := c.keepaliveError(); err != nil {
+		return err
+	}
+	c.groupOps.Add(1)
+	return nil
+}
+
 // bindCleanupTransport forwards operation cancellation only while binding. The
 // transport then follows lifetime until cancel is called after remote cleanup.
 func bindCleanupTransport(

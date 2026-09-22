@@ -21,6 +21,9 @@ func (c *dcomConn) addItems(ctx context.Context, handle int, ids []string) ([]*I
 		return nil, err
 	}
 	defer g.release()
+	if err := c.keepaliveError(); err != nil {
+		return nil, err
+	}
 	out := make([]*Item, len(ids))
 	pending := []string{}
 	positions := map[string][]int{}
