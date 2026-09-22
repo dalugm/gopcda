@@ -3,8 +3,8 @@ module github.com/dalugm/gopcda
 go 1.26.0
 
 require (
-	github.com/oiweiwei/go-msrpc v1.6.3
-	github.com/oiweiwei/go-opcda v0.6.0
+	github.com/oiweiwei/go-msrpc v1.6.4
+	github.com/oiweiwei/go-opcda v0.7.0
 )
 
 require (

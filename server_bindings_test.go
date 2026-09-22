@@ -14,6 +14,7 @@ import (
 
 func TestAddGroupBindingsPreserveUnicodeNameAndOptionalPointers(t *testing.T) {
 	bias, deadband := int32(-60), float32(12.5)
+	zeroBias, zeroDeadband := int32(0), float32(0)
 	for _, tt := range []struct {
 		name     string
 		bias     *int32
@@ -22,6 +23,7 @@ func TestAddGroupBindingsPreserveUnicodeNameAndOptionalPointers(t *testing.T) {
 	}{
 		{name: "nil pointers"},
 		{name: "non-null pointers", bias: &bias, deadband: &deadband, nonNull: true},
+		{name: "explicit zero pointers", bias: &zeroBias, deadband: &zeroDeadband, nonNull: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			const groupName = "\u03a9\U0001f642"
@@ -50,9 +52,12 @@ func TestAddGroupBindingsPreserveUnicodeNameAndOptionalPointers(t *testing.T) {
 			}
 
 			// pTimeBias and pPercentDeadband are optional unique pointers. The
-			// generated scalar fields cannot represent nil, so the adapter must
-			// preserve the private request's pointer state.
-			for _, offset := range []int{64, 68} {
+			// generated null mask must preserve nil versus explicit zero values.
+			deadbandOffset := 68
+			if tt.nonNull {
+				deadbandOffset += 4 // The time bias referent follows its pointer.
+			}
+			for _, offset := range []int{64, deadbandOffset} {
 				if got := binary.LittleEndian.Uint32(wire[offset:]); (got != 0) != tt.nonNull {
 					t.Fatalf(
 						"pointer at offset %d = %#x, non-null want %t: %x",
@@ -72,7 +77,8 @@ func TestAddGroupBindingsPreserveUnicodeNameAndOptionalPointers(t *testing.T) {
 				decoded.ClientGroup != 7 {
 				t.Fatalf("decoded generated request: %+v", decoded)
 			}
-			if tt.nonNull && (decoded.TimeBias != bias || decoded.PercentDeadband != deadband) {
+			if tt.nonNull &&
+				(decoded.TimeBias != *tt.bias || decoded.PercentDeadband != *tt.deadband) {
 				t.Fatalf("decoded generated pointer values: %+v", decoded)
 			}
 		})
