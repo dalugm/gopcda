@@ -105,6 +105,8 @@ successful connection does not end the session. Pass an operation context to eac
 call and always close the server with `Close(ctx)`, checking its cleanup error.
 Use a fresh cleanup context if the operation context has already expired.
 The connection maintains DCOM keepalive even when no persistent group exists.
+ItemIDs must be nonempty valid UTF-8 without NUL; invalid names are rejected
+without substituting characters or changing the target item.
 
 ## Periodic acquisition
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/oiweiwei/go-msrpc/dcerpc"
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
@@ -34,8 +32,8 @@ type ItemProperty struct {
 // successful string value. Unsupported value types have per-property errors.
 // Interface, transport and malformed-response failures are returned separately.
 func (s *Server) ItemProperties(ctx context.Context, id string) ([]ItemProperty, error) {
-	if id == "" || strings.ContainsRune(id, 0) || !utf8.ValidString(id) {
-		return nil, errors.New("opcda: ItemID must be nonempty valid UTF-8 without NUL")
+	if err := validateItemID(id); err != nil {
+		return nil, err
 	}
 	ctx, done := s.operationContext(ctx)
 	defer done()

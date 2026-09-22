@@ -59,7 +59,7 @@ func TestWriteResponse(t *testing.T) {
 	if err := r.check(); err != nil {
 		t.Fatal(err)
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		var r writeOneResponse
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("truncation %d", n)
@@ -85,7 +85,7 @@ func TestWriteValidation(t *testing.T) {
 		}
 	}
 	s := &Server{ctx: context.Background()}
-	for _, id := range []string{"", "a\x00b"} {
+	for _, id := range []string{"", "a\x00b", "Pump.\xff", "Pump.\xc0\xaf"} {
 		if err := s.WriteItem(context.Background(), id, float32(1)); err == nil {
 			t.Fatal("accepted invalid ID")
 		}

@@ -5,7 +5,19 @@
 // on-demand writes. The cmd tools are optional and are not used by the library.
 package opcda
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"unicode/utf8"
+)
+
+func validateItemID(id string) error {
+	if id == "" || strings.ContainsRune(id, 0) || !utf8.ValidString(id) {
+		return errors.New("opcda: ItemID must be nonempty valid UTF-8 without NUL")
+	}
+	return nil
+}
 
 // Quality bits (OPC DA quality specification).
 const (

@@ -48,7 +48,7 @@ func TestReadFloatQualityAndTime(t *testing.T) {
 	if err != nil || QualityIsGood(result.Quality) {
 		t.Fatalf("%+v %v", result, err)
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		var r readOneResponse
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("accepted truncation %d", n)
@@ -79,7 +79,7 @@ func TestDeviceReadRequest(t *testing.T) {
 
 func TestReadRejectsInvalidInput(t *testing.T) {
 	s := &Server{ctx: context.Background()}
-	for _, id := range []string{"", "a\x00b"} {
+	for _, id := range []string{"", "a\x00b", "Pump.\xff", "Pump.\xc0\xaf"} {
 		if _, err := s.ReadItem(context.Background(), id); err == nil {
 			t.Fatal("accepted invalid ID")
 		}
@@ -150,7 +150,7 @@ func TestAddOneItemResultAndFailure(t *testing.T) {
 	if r.handle != 123 || r.canonical != 4 || r.rights != 1 {
 		t.Fatalf("%+v", r)
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		var r addOneResponse
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("accepted truncation %d", n)

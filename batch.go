@@ -6,7 +6,6 @@ import (
 	"errors"
 	"math"
 	"slices"
-	"strings"
 
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
@@ -29,8 +28,8 @@ func (c *dcomConn) addItems(ctx context.Context, handle int, ids []string) ([]*I
 	positions := map[string][]int{}
 	for i, id := range ids {
 		out[i] = &Item{ItemID: id}
-		if id == "" || strings.ContainsRune(id, 0) {
-			out[i].Error = errors.New("invalid ItemID")
+		if err := validateItemID(id); err != nil {
+			out[i].Error = err
 			continue
 		}
 		if v, ok := g.items[id]; ok {

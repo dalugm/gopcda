@@ -2,9 +2,7 @@ package opcda
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/oiweiwei/go-msrpc/dcerpc"
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom"
@@ -17,8 +15,8 @@ import (
 // it does not verify the physical process value. Writes are never retried.
 // An error after sending the request does not imply the value was unchanged.
 func (s *Server) WriteItem(ctx context.Context, id string, value any) error {
-	if id == "" || strings.ContainsRune(id, 0) {
-		return errors.New("opcda: ItemID must be nonempty and contain no NUL")
+	if err := validateItemID(id); err != nil {
+		return err
 	}
 	if _, err := writeVariant(value); err != nil {
 		return err

@@ -143,6 +143,36 @@ func TestBatchAddPartialAndDuplicate(t *testing.T) {
 	}
 }
 
+func TestBatchAddRejectsInvalidUTF8WithoutChangingItemIdentity(t *testing.T) {
+	c, persistent, wire := testPersistent()
+	g := &Group{server: &Server{ctx: t.Context(), conn: c}, handle: persistent.handle}
+	ids := []string{"Pump.\xff", "Pump.\ufffd", "Pump.\U0001f600"}
+	items, err := g.AddItems(t.Context(), ids)
+	if err != nil || len(items) != 3 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if items[0].Error == nil || items[1].Error != nil || items[2].Error != nil {
+		t.Fatalf("invalid UTF-8 accepted or valid Unicode rejected: %+v", items)
+	}
+	if _, registered := persistent.items[ids[0]]; registered || len(persistent.items) != 2 ||
+		wire.calls.Load() != 1 {
+		t.Fatal("invalid ItemID reached registration")
+	}
+	for i := range items {
+		if items[i].ItemID != ids[i] {
+			t.Fatal("ItemID was rewritten")
+		}
+	}
+	outcomes, err := g.Write(t.Context(), map[string]any{ids[0]: float32(1)})
+	if err != nil || !errors.Is(outcomes[ids[0]], ErrWriteNotAttempted) || wire.calls.Load() != 1 {
+		t.Fatalf(
+			"write to invalid ItemID reached a different registered point: %v %v",
+			outcomes,
+			err,
+		)
+	}
+}
+
 func TestBatchWritePartialAndNoRetry(t *testing.T) {
 	c, g, wire := testPersistent()
 	g.items["A"] = registeredItem{handle: 1, rights: 3}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/oiweiwei/go-msrpc/dcerpc"
@@ -19,8 +18,8 @@ import (
 // Standard scalar, Array and BYREF Variant values are supported; unsupported
 // VARIANT types return an error. No point values are written.
 func (s *Server) ReadItem(ctx context.Context, itemID string) (*ReadResult, error) {
-	if itemID == "" || strings.ContainsRune(itemID, 0) {
-		return nil, errors.New("opcda: ItemID must be nonempty and contain no NUL")
+	if err := validateItemID(itemID); err != nil {
+		return nil, err
 	}
 	ctx, done := s.operationContext(ctx)
 	defer done()

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/oiweiwei/go-msrpc/dcerpc"
 	"github.com/oiweiwei/go-msrpc/midl/uuid"
@@ -86,7 +87,7 @@ func (c *dcomConn) addGroup(
 	if rate <= 0 || uint64(rate) > math.MaxUint32 || math.IsNaN(float64(deadband)) ||
 		deadband < 0 ||
 		deadband > 100 ||
-		strings.ContainsRune(name, 0) {
+		strings.ContainsRune(name, 0) || !utf8.ValidString(name) {
 		return nil, errors.New("invalid group name, update rate or deadband")
 	}
 	c.groupsMu.Lock()
