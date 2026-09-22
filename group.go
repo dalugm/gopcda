@@ -3,18 +3,14 @@ package opcda
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 )
 
 // Group represents an OPC DA group.
 type Group struct {
-	mu           sync.RWMutex
 	server       *Server
 	name         string
 	updateRateMs int
-	deadband     float32
-	active       bool
 	handle       int // server-allocated group handle
 }
 
@@ -51,8 +47,6 @@ func (g *Group) AddItems(ctx context.Context, itemIDs []string) ([]*Item, error)
 
 // RevisedUpdateRate returns the server-accepted sampling/cache update period.
 func (g *Group) RevisedUpdateRate() time.Duration {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 	return time.Duration(g.updateRateMs) * time.Millisecond
 }
 
@@ -91,22 +85,17 @@ func (g *Group) Write(ctx context.Context, values map[string]any) (map[string]er
 	return g.server.conn.write(ctx, g.handle, values)
 }
 
-// SetActive activates or deactivates the group.
+// SetActive activates or deactivates the group without changing its update rate
+// or deadband.
 func (g *Group) SetActive(ctx context.Context, active bool) error {
 	ctx, done := g.server.operationContext(ctx)
 	defer done()
 	if err := g.server.operationError(ctx); err != nil {
 		return err
 	}
-	g.mu.RLock()
-	rate, deadband := g.updateRateMs, g.deadband
-	g.mu.RUnlock()
-	if err := g.server.conn.setGroupState(ctx, g.handle, active, rate, deadband); err != nil {
+	if err := g.server.conn.setGroupActive(ctx, g.handle, active); err != nil {
 		return fmt.Errorf("opcda: set group %q active=%v: %w", g.name, active, err)
 	}
-	g.mu.Lock()
-	g.active = active
-	g.mu.Unlock()
 	return nil
 }
 

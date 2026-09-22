@@ -175,20 +175,17 @@ func (r *batchWriteResponse) UnmarshalNDR(ctx context.Context, w ndr.Reader) err
 }
 
 type groupStateRequest struct {
-	rate     uint32
-	active   bool
-	deadband float32
+	active bool
 }
 
-// SetState uses the generated null mask to leave fields outside this operation
-// unchanged while explicitly updating rate, active and deadband.
+// SetActive changes only the active flag; all other properties remain unchanged.
 func (r *groupStateRequest) MarshalNDR(ctx context.Context, w ndr.Writer) error {
 	request := &statemgt.SetStateRequest{
-		This:                orpcThis(),
-		RequestedUpdateRate: r.rate,
-		Active:              r.active,
-		PercentDeadband:     r.deadband,
-		NullMask: statemgt.SetStateNullMaskTimeBias |
+		This:   orpcThis(),
+		Active: r.active,
+		NullMask: statemgt.SetStateNullMaskRequestedUpdateRate |
+			statemgt.SetStateNullMaskPercentDeadband |
+			statemgt.SetStateNullMaskTimeBias |
 			statemgt.SetStateNullMaskLCID |
 			statemgt.SetStateNullMaskClientGroup,
 	}

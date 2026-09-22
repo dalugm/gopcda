@@ -113,7 +113,7 @@ func (c *dcomConn) addGroup(
 		c.groups = make(map[int]*persistentGroup)
 	}
 	c.groups[g.handle] = g
-	return &Group{handle: g.handle, updateRateMs: int(g.rate), active: true}, nil
+	return &Group{handle: g.handle, updateRateMs: int(g.rate)}, nil
 }
 
 func (c *dcomConn) openPersistentGroup(
@@ -319,12 +319,10 @@ func (c *dcomConn) removeGroupInternal(ctx context.Context, handle int) error {
 	return c.disposeGroup(ctx, g, true)
 }
 
-func (c *dcomConn) setGroupState(
+func (c *dcomConn) setGroupActive(
 	ctx context.Context,
 	handle int,
 	active bool,
-	rate int,
-	deadband float32,
 ) error {
 	g, err := c.getGroup(handle)
 	if err != nil {
@@ -340,7 +338,7 @@ func (c *dcomConn) setGroupState(
 		&opcOp{
 			opNum:       4,
 			interfaceID: iopcGroupStateMgtIID.GUID().UUID(),
-			req:         &groupStateRequest{rate: uint32(rate), active: active, deadband: deadband},
+			req:         &groupStateRequest{active: active},
 			resp:        r,
 		},
 		dcom.WithIPID(g.stateIPID),
@@ -350,7 +348,6 @@ func (c *dcomConn) setGroupState(
 	if r.hresult < 0 {
 		return hresultError("SetState", "", r.hresult)
 	}
-	g.rate = r.rate
 	return nil
 }
 

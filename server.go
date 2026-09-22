@@ -74,7 +74,6 @@ func (s *Server) AddGroupContext(
 	}
 	group.server = s
 	group.name = name
-	group.deadband = deadband
 	return group, nil
 }
 

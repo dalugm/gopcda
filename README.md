@@ -194,8 +194,8 @@ remain responsible for routing each call.
 The adapters interpret HRESULTs in this library, preserving successful results
 when an operation reports partial success (`S_FALSE`). Small compatibility
 codecs remain where generated bindings cannot express existing contracts:
-length-counted BSTR reads, BYREF values, optional group-state fields and strict
-VARIANT/array validation. UTF-16 strings use the upstream NDR codec.
+length-counted BSTR reads, BYREF values and strict VARIANT/array validation.
+UTF-16 strings and optional group-state fields use the upstream codecs.
 
 ## License
 

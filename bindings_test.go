@@ -97,18 +97,17 @@ func TestBindingsAddUnicodeItem(t *testing.T) {
 }
 
 func TestGroupStatePreservesUnspecifiedFields(t *testing.T) {
-	wire, err := ndr.Marshal(&groupStateRequest{rate: 1000, active: false, deadband: 0})
+	wire, err := ndr.Marshal(&groupStateRequest{active: false})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Set rate, active=false and deadband=0 explicitly. Leave time bias,
-	// locale and client handle unchanged by sending null pointers.
-	if len(wire) != 68 || binary.LittleEndian.Uint32(wire[32:]) == 0 ||
-		binary.LittleEndian.Uint32(wire[36:]) != 1000 ||
-		binary.LittleEndian.Uint32(wire[40:]) == 0 || binary.LittleEndian.Uint32(wire[44:]) != 0 ||
-		binary.LittleEndian.Uint32(wire[48:]) != 0 || binary.LittleEndian.Uint32(wire[52:]) == 0 ||
-		binary.LittleEndian.Uint32(wire[56:]) != 0 || binary.LittleEndian.Uint32(wire[60:]) != 0 ||
-		binary.LittleEndian.Uint32(wire[64:]) != 0 {
+	// Explicit false has a non-null pointer and zero payload. Rate, deadband,
+	// time bias, locale and client handle must all remain unspecified.
+	if len(wire) != 60 || binary.LittleEndian.Uint32(wire[32:]) != 0 ||
+		binary.LittleEndian.Uint32(wire[36:]) == 0 ||
+		binary.LittleEndian.Uint32(wire[40:]) != 0 || binary.LittleEndian.Uint32(wire[44:]) != 0 ||
+		binary.LittleEndian.Uint32(wire[48:]) != 0 || binary.LittleEndian.Uint32(wire[52:]) != 0 ||
+		binary.LittleEndian.Uint32(wire[56:]) != 0 {
 		t.Fatalf("unexpected optional group state fields: %x", wire)
 	}
 }

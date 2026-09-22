@@ -16,12 +16,10 @@ type connection interface {
 	readGroup(ctx context.Context, groupHandle int, cache bool) ([]ReadResult, error)
 	read(ctx context.Context, groupHandle int, itemIDs []string, cache bool) ([]ReadResult, error)
 	write(ctx context.Context, groupHandle int, values map[string]any) (map[string]error, error)
-	setGroupState(
+	setGroupActive(
 		ctx context.Context,
 		groupHandle int,
 		active bool,
-		updateRateMs int,
-		deadband float32,
 	) error
 	removeGroup(ctx context.Context, groupHandle int) error
 	getServerStatus(ctx context.Context) (*ServerStatus, error)
