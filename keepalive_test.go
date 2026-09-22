@@ -25,7 +25,8 @@ func (p *pingClient) ComplexPing(
 
 func TestPingSetReferenceCounts(t *testing.T) {
 	fake := &pingClient{}
-	p := &objectPinger{client: fake, objects: map[uint64]int{}}
+	p := newObjectPinger()
+	p.client = fake
 	c := &dcomConn{pinger: p}
 	for range 2 {
 		if err := p.add(context.Background(), 7); err != nil {
@@ -51,12 +52,14 @@ func TestPingSetReferenceCounts(t *testing.T) {
 }
 
 func TestHealthCheckDoesNotWaitForPingNetworkLocks(t *testing.T) {
-	p := &objectPinger{}
+	p := newObjectPinger()
 	c := &dcomConn{pinger: p}
 	c.pingHealth.Store(p)
-	p.mu.Lock()
+	if err := p.acquire(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	c.pingMu.Lock()
-	defer p.mu.Unlock()
+	defer p.release()
 	defer c.pingMu.Unlock()
 	done := make(chan error, 1)
 	go func() { done <- c.keepaliveError() }()

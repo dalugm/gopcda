@@ -90,7 +90,7 @@ func (c *groupSetupConn) Invoke(
 	}
 }
 
-func groupSetupReference(t *testing.T) *dcom.InterfacePointer {
+func groupSetupReference(t *testing.T, flags uint32) *dcom.InterfacePointer {
 	t.Helper()
 	data, err := ndr.Marshal(&dcom.ObjectReference{
 		Signature: []byte("MEOW"),
@@ -101,7 +101,7 @@ func groupSetupReference(t *testing.T) *dcom.InterfacePointer {
 				Standard: &dcom.ObjectReferenceStandard{
 					ResolverAddr: &dcom.DualStringArray{},
 					Std: &dcom.StdObjectReference{
-						Flags:                 0x1000,
+						Flags:                 flags,
 						OXID:                  1,
 						OID:                   2,
 						IPID:                  &dcom.IPID{Data1: 10},
@@ -125,7 +125,10 @@ func TestPersistentGroupSetupCancellationReleasesReferences(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		setup, cancel := context.WithCancel(t.Context())
 		defer cancel()
-		server := &groupSetupConn{lifetime: t.Context(), groupReference: groupSetupReference(t)}
+		server := &groupSetupConn{
+			lifetime:       t.Context(),
+			groupReference: groupSetupReference(t, 0x1000),
+		}
 		c := &dcomConn{
 			rpcCtx:        t.Context(),
 			serverConn:    server,
@@ -171,7 +174,10 @@ func TestPersistentGroupTransportsSurviveSetupContext(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		setup, cancel := context.WithCancel(t.Context())
 		defer cancel()
-		server := &groupSetupConn{lifetime: t.Context(), groupReference: groupSetupReference(t)}
+		server := &groupSetupConn{
+			lifetime:       t.Context(),
+			groupReference: groupSetupReference(t, 0x1000),
+		}
 		c := &dcomConn{
 			rpcCtx:        t.Context(),
 			serverConn:    server,
@@ -207,6 +213,53 @@ func TestPersistentGroupTransportsSurviveSetupContext(t *testing.T) {
 			if !conn.closed || conn.lifetime.Err() == nil {
 				t.Fatal("group transport outlived cleanup")
 			}
+		}
+	})
+}
+
+func TestGroupCancellationBeforeRetentionPreservesSession(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		setup, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		server := &groupSetupConn{lifetime: t.Context(), groupReference: groupSetupReference(t, 0)}
+		c := &dcomConn{
+			rpcCtx: t.Context(), serverConn: server, serverOXID: 1, serverOID: 7,
+			remoteUnknown: &dcom.IPID{Data1: 9},
+		}
+		pingWire := startTestKeepalive(t, c)
+		var remote *groupSetupConn
+		_, err := c.openPersistentGroup(setup, "test", 500, 0,
+			func(ctx context.Context, iid *uuid.UUID) (dcerpc.Conn, error) {
+				conn := &groupSetupConn{lifetime: ctx}
+				if iid.Equals(rem.RemoteUnknownSyntaxV0_0.IfUUID) {
+					remote = conn
+				}
+				if iid.Equals(iopcGroupStateMgtIID.GUID().UUID()) {
+					cancel()
+				}
+				return conn, nil
+			},
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+		if remote == nil || remote.released != 3 || server.removed != 1 {
+			t.Fatalf(
+				"group cancellation skipped cleanup: remote=%+v removed=%d",
+				remote,
+				server.removed,
+			)
+		}
+		if c.keepaliveError() != nil || len(pingWire.changes) != 1 {
+			t.Fatalf("group setup cancellation changed session keepalive: %v", c.keepaliveError())
+		}
+		existing, _ := registerTestGroup(t, &Server{ctx: t.Context(), conn: c}, 73)
+		values, err := existing.Read(t.Context(), SourceCache)
+		if err != nil || len(values) != 1 || values[0].Value != float32(42) {
+			t.Fatalf("group setup cancellation affected another group: %v %v", values, err)
+		}
+		if err := existing.Remove(t.Context()); err != nil {
+			t.Fatal(err)
 		}
 	})
 }

@@ -16,11 +16,12 @@ import (
 // lifecyclePingConn exercises the generated client and records the actual RPCs.
 type lifecyclePingConn struct {
 	dcerpc.Conn
-	lifetime context.Context
-	changes  []*exporter.ComplexPingRequest
-	pings    int
-	closed   bool
-	afterAdd func()
+	lifetime  context.Context
+	changes   []*exporter.ComplexPingRequest
+	pings     int
+	closed    bool
+	afterAdd  func()
+	changeErr error
 }
 
 func (c *lifecyclePingConn) Bind(context.Context, ...dcerpc.Option) (dcerpc.Conn, error) {
@@ -50,6 +51,9 @@ func (c *lifecyclePingConn) Invoke(
 			return err
 		}
 		c.changes = append(c.changes, r)
+		if c.changeErr != nil {
+			return c.changeErr
+		}
 		if len(r.AddToSet) > 0 && c.afterAdd != nil {
 			c.afterAdd()
 		}

@@ -22,7 +22,7 @@ func cleanupContext() (context.Context, context.CancelFunc) {
 }
 
 type objectPinger struct {
-	mu        sync.Mutex
+	gate      chan struct{}
 	errMu     sync.RWMutex
 	conn      dcerpc.Conn
 	client    exporter.ObjectExporterClient
@@ -35,6 +35,30 @@ type objectPinger struct {
 	done      chan struct{}
 }
 
+func newObjectPinger() *objectPinger {
+	p := &objectPinger{gate: make(chan struct{}, 1), objects: make(map[uint64]int)}
+	p.gate <- struct{}{}
+	return p
+}
+
+func (p *objectPinger) acquire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.gate:
+	}
+	if err := ctx.Err(); err != nil {
+		p.release()
+		return err
+	}
+	return nil
+}
+
+func (p *objectPinger) release() { p.gate <- struct{}{} }
+
 // startKeepalive runs once before publishing the session. Even when the server
 // itself has SORF_NOPING, groups may require pinging on this exporter later.
 func (c *dcomConn) startKeepalive(
@@ -45,7 +69,8 @@ func (c *dcomConn) startKeepalive(
 	if err != nil {
 		return err
 	}
-	p := &objectPinger{rpcCancel: cancel, conn: conn, objects: map[uint64]int{}}
+	p := newObjectPinger()
+	p.rpcCancel, p.conn = cancel, conn
 	defer func() {
 		if retErr != nil {
 			cleanup, done := cleanupContext()
@@ -111,6 +136,10 @@ func (c *dcomConn) retainObject(ctx context.Context, oid uint64, flags uint32) e
 }
 
 func (p *objectPinger) change(ctx context.Context, add, del []uint64) error {
+	// Cancellation before dispatch does not make the remote ping set uncertain.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	p.sequence++
 	r, err := p.client.ComplexPing(
 		ctx,
@@ -133,8 +162,10 @@ func (p *objectPinger) change(ctx context.Context, add, del []uint64) error {
 }
 
 func (p *objectPinger) add(ctx context.Context, oid uint64) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	if err := p.acquire(ctx); err != nil {
+		return err
+	}
+	defer p.release()
 	if oid == 0 {
 		return errors.New("missing OID for keepalive")
 	}
@@ -157,8 +188,10 @@ func (c *dcomConn) releaseObject(ctx context.Context, oid uint64) error {
 	if p == nil {
 		return nil
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	if err := p.acquire(ctx); err != nil {
+		return err
+	}
+	defer p.release()
 	if p.objects[oid] > 1 {
 		p.objects[oid]--
 		return nil
@@ -166,8 +199,11 @@ func (c *dcomConn) releaseObject(ctx context.Context, oid uint64) error {
 	if p.objects[oid] == 0 {
 		return nil
 	}
+	if err := p.change(ctx, nil, []uint64{oid}); err != nil {
+		return err
+	}
 	delete(p.objects, oid)
-	return p.change(ctx, nil, []uint64{oid})
+	return nil
 }
 
 func (p *objectPinger) run(ctx context.Context) {
@@ -180,14 +216,17 @@ func (p *objectPinger) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			call, cancel := context.WithTimeout(ctx, 10*time.Second)
-			p.mu.Lock()
+			if err := p.acquire(call); err != nil {
+				cancel()
+				continue
+			}
 			if p.set != 0 {
 				_, err := p.client.SimplePing(call, &exporter.SimplePingRequest{SetID: p.set})
 				if err != nil && ctx.Err() == nil {
 					p.setError(fmt.Errorf("DCOM keepalive failed; reconnect: %w", err))
 				}
 			}
-			p.mu.Unlock()
+			p.release()
 			cancel()
 		}
 	}
@@ -226,8 +265,10 @@ func (p *objectPinger) close(ctx context.Context) error {
 	if p.done != nil {
 		<-p.done
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	if err := p.acquire(ctx); err != nil {
+		return errors.Join(err, p.conn.Close(ctx))
+	}
+	defer p.release()
 	ids := make([]uint64, 0, len(p.objects))
 	for oid := range p.objects {
 		ids = append(ids, oid)

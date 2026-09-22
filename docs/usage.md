@@ -75,6 +75,8 @@ through DCOM ping sets. Cleanup failures are returned, not silently retried.
 Server keepalive starts during connection setup, independently of group creation.
 A failure to establish keepalive fails the connection; later keepalive failures
 are returned by operations so the caller can close the session and reconnect.
+Cancellation before a ping-set update is dispatched leaves the session usable;
+an update whose outcome is uncertain is treated as a keepalive failure.
 
 ## Writing values
 
