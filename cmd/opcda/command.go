@@ -15,14 +15,13 @@ import (
 const usage = "usage: opcda resolve PROGID | status | browse | properties ITEM_ID | read ITEM_ID | write ITEM_ID VALUE [TYPE] | poll ITEM_FILE INTERVAL [CYCLES] [cache|device]\nConnection: OPCDA_HOST, OPCDA_CLSID or OPCDA_PROGID, OPCDA_DOMAIN, OPCDA_USERNAME, OPCDA_PASSWORD\nResolve uses the positional ProgID and ignores OPCDA_CLSID and OPCDA_PROGID.\nOptional: OPCDA_TIMEOUT=180s\nWrite types: bool, int8/16/32/64, uint8/16/32/64, float32 (default), float64, string, date, currency, decimal, error, int, uint, empty, null"
 
 type server interface {
-	GetServerStatusContext(context.Context) (*opcda.ServerStatus, error)
+	GetServerStatus(context.Context) (*opcda.ServerStatus, error)
 	BrowseItemIDs(context.Context) ([]string, error)
 	ItemProperties(context.Context, string) ([]opcda.ItemProperty, error)
 	ReadItem(context.Context, string) (*opcda.ReadResult, error)
 	WriteItem(context.Context, string, any) error
-	AddGroupContext(context.Context, string, int, float32) (*opcda.Group, error)
+	AddGroup(context.Context, string, time.Duration, float32) (*opcda.Group, error)
 	Close(context.Context) error
-	Disconnect()
 }
 type connector func(context.Context, opcda.ServerConfig) (server, error)
 
@@ -107,13 +106,13 @@ func run(
 		}
 		return printProperties(out, args[1], properties)
 	case "poll":
-		g, err := srv.AddGroupContext(ctx, "", int(poll.interval.Milliseconds()), 0)
+		g, err := srv.AddGroup(ctx, "", poll.interval, 0)
 		if err != nil {
 			return err
 		}
 		return runPoll(ctx, poll, g, out, diagnostics)
 	case "status":
-		status, err := srv.GetServerStatusContext(ctx)
+		status, err := srv.GetServerStatus(ctx)
 		if err != nil {
 			return err
 		}

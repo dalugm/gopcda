@@ -102,16 +102,18 @@ func run() (err error) {
 
 `Connect` uses its context only during setup. Canceling that context after a
 successful connection does not end the session. Pass an operation context to each
-call and always close the server. `Disconnect` is a convenience method that
-ignores cleanup errors; use `Close(ctx)` when those errors matter.
+call and always close the server with `Close(ctx)`, checking its cleanup error.
+Use a fresh cleanup context if the operation context has already expired.
 
 ## Periodic acquisition
 
 Reuse one server session and a persistent group for periodic reads and writes:
-create it with `AddGroupContext`, register ItemIDs once with `AddItems`, then call
-`Read` on your application's timer. The group owns and reuses registration handles.
+create it with `AddGroup(ctx, name, 500*time.Millisecond, deadband)`, register
+ItemIDs once with `AddItems`, then call `Read` on your application's timer.
+The group owns and reuses registration handles.
 
-- `Read(ctx, true)` reads the server cache; `false` requests device values.
+- `Read(ctx, opcda.SourceCache)` reads the server cache;
+  `opcda.SourceDevice` requests device values.
 - Check `RevisedUpdateRate()`: the requested group interval may be revised.
 - Polling is not a subscription, and a cache read does not imply a fresh device sample.
 - Use `ReadItems` for a registered subset, `Write` for explicit writes, and

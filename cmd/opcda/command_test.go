@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	opcda "github.com/dalugm/gopcda"
 )
@@ -19,7 +20,7 @@ type fakeServer struct {
 	err     error
 }
 
-func (f *fakeServer) GetServerStatusContext(context.Context) (*opcda.ServerStatus, error) {
+func (f *fakeServer) GetServerStatus(context.Context) (*opcda.ServerStatus, error) {
 	return &opcda.ServerStatus{VendorInfo: "SUPCON"}, f.err
 }
 
@@ -36,7 +37,7 @@ func (f *fakeServer) ReadItem(_ context.Context, id string) (*opcda.ReadResult, 
 		SourceTimestampMs: 1000,
 	}, f.err
 }
-func (f *fakeServer) Disconnect() { f.closed = true }
+
 func TestCommands(t *testing.T) {
 	for _, args := range [][]string{{"status"}, {"browse"}, {"read", "13HAD10CT_AVE.VALUE"}} {
 		var out, diag bytes.Buffer
@@ -194,7 +195,12 @@ func TestWriteFailureDoesNotRetryOrPrintSuccess(t *testing.T) {
 	}
 }
 
-func (f *fakeServer) AddGroupContext(context.Context, string, int, float32) (*opcda.Group, error) {
+func (f *fakeServer) AddGroup(
+	context.Context,
+	string,
+	time.Duration,
+	float32,
+) (*opcda.Group, error) {
 	return nil, errors.New("not expected in this test")
 }
 
@@ -202,7 +208,7 @@ func (f *fakeServer) Close(context.Context) error { f.closed = true; return nil 
 
 type blockedStatusServer struct{ fakeServer }
 
-func (s *blockedStatusServer) GetServerStatusContext(
+func (s *blockedStatusServer) GetServerStatus(
 	ctx context.Context,
 ) (*opcda.ServerStatus, error) {
 	<-ctx.Done()

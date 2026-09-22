@@ -8,7 +8,7 @@ Use a persistent group for periodic reads and on-demand writes. Register items
 once, then reuse the group's connections and server handles:
 
 ```go
-group, err := server.AddGroupContext(ctx, "process", 500, 0)
+group, err := server.AddGroup(ctx, "process", 500*time.Millisecond, 0)
 if err != nil {
     return err
 }
@@ -24,7 +24,7 @@ for _, item := range items {
     }
 }
 
-values, err := group.Read(ctx, true) // true: server cache; false: device
+values, err := group.Read(ctx, opcda.SourceCache) // Use SourceDevice to request a device read.
 if err != nil {
     return err
 }
@@ -46,7 +46,9 @@ ordered application queue if write order matters.
 Batches contain at most 1,000 items per RPC; larger requests are split. Duplicate
 ItemIDs and repeated `AddItems` calls reuse existing handles without another RPC.
 The library owns the registration cache; callers do not need a second one.
-A requested update interval is not guaranteed:
+A requested update interval must be a positive whole number of milliseconds,
+at most 4294967295ms. Fractional milliseconds are rejected instead of truncated.
+The requested interval is not guaranteed:
 inspect `RevisedUpdateRate()` and the returned timestamps. Cache polling frequency
 does not establish the device's sampling frequency.
 
@@ -95,7 +97,9 @@ Access rights returned by `AddItems` are a server hint, not a client-side write
 authorization rule. Explicit writes use the server's current per-item HRESULT;
 cached access rights never suppress a write request.
 
-Always inspect both the result map and the call error. A returned entry with a nil error confirms
+Always inspect both the result map and the call error: a nil call error does not
+mean all items succeeded. The map contains every requested ItemID.
+A returned entry with a nil error confirms
 that item was acknowledged by the server. Batch writes are not transactions:
 earlier batches may succeed before a later batch fails. Local validation failures
 are reported per item; other valid items may still be written. Preflight and local
@@ -152,7 +156,7 @@ calling application.
 
 ## Other operations
 
-- `server.GetServerStatusContext(ctx)` queries server status with a per-call deadline.
+- `server.GetServerStatus(ctx)` queries server status with a per-call deadline.
 - `server.BrowseItemIDs(ctx)` returns sorted, unique DA2 flat browse results.
 - `server.ReadItem(ctx, itemID)` performs one synchronous device read using a temporary group.
 

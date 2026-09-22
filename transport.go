@@ -10,7 +10,7 @@ type connection interface {
 	readItem(ctx context.Context, id string) (*ReadResult, error)
 	browseItemIDs(ctx context.Context) ([]string, error)
 	itemProperties(ctx context.Context, id string) ([]ItemProperty, error)
-	addGroup(ctx context.Context, name string, updateRateMs int, deadband float32) (*Group, error)
+	addGroup(ctx context.Context, name string, updateRateMs int64, deadband float32) (*Group, error)
 	addItems(ctx context.Context, groupHandle int, itemIDs []string) ([]*Item, error)
 	removeItems(ctx context.Context, groupHandle int, itemIDs []string) (map[string]error, error)
 	readGroup(ctx context.Context, groupHandle int, cache bool) ([]ReadResult, error)

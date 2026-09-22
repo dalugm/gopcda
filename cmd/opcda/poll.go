@@ -19,7 +19,7 @@ type pollConfig struct {
 	ids      []string
 	interval time.Duration
 	cycles   int
-	cache    bool
+	source   opcda.ReadSource
 }
 
 func parsePoll(args []string) (*pollConfig, error) {
@@ -27,8 +27,9 @@ func parsePoll(args []string) (*pollConfig, error) {
 		return nil, errors.New("usage: opcda poll ITEM_FILE INTERVAL [CYCLES] [cache|device]")
 	}
 	interval, err := time.ParseDuration(args[2])
-	if err != nil || interval < time.Millisecond || interval > time.Hour {
-		return nil, errors.New("poll interval must be between 1ms and 1h")
+	if err != nil || interval < time.Millisecond || interval > time.Hour ||
+		interval%time.Millisecond != 0 {
+		return nil, errors.New("poll interval must be whole milliseconds between 1ms and 1h")
 	}
 	cycles := 20
 	if len(args) >= 4 {
@@ -37,12 +38,12 @@ func parsePoll(args []string) (*pollConfig, error) {
 			return nil, errors.New("poll cycles must be positive")
 		}
 	}
-	cache := true
+	source := opcda.SourceCache
 	if len(args) == 5 {
 		switch args[4] {
 		case "cache":
 		case "device":
-			cache = false
+			source = opcda.SourceDevice
 		default:
 			return nil, errors.New("poll source must be cache or device")
 		}
@@ -53,7 +54,7 @@ func parsePoll(args []string) (*pollConfig, error) {
 	}
 	ids := []string{}
 	seen := map[string]bool{}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		id := strings.TrimSpace(line)
 		if id != "" && !seen[id] {
 			ids = append(ids, id)
@@ -63,12 +64,12 @@ func parsePoll(args []string) (*pollConfig, error) {
 	if len(ids) == 0 {
 		return nil, errors.New("item file is empty")
 	}
-	return &pollConfig{ids: ids, interval: interval, cycles: cycles, cache: cache}, nil
+	return &pollConfig{ids: ids, interval: interval, cycles: cycles, source: source}, nil
 }
 
 type pollingGroup interface {
 	AddItems(context.Context, []string) ([]*opcda.Item, error)
-	Read(context.Context, bool) ([]opcda.ReadResult, error)
+	Read(context.Context, opcda.ReadSource) ([]opcda.ReadResult, error)
 	Remove(context.Context) error
 	RevisedUpdateRate() time.Duration
 }
@@ -100,7 +101,7 @@ func runPoll(
 		len(items),
 		cfg.interval,
 		group.RevisedUpdateRate(),
-		cfg.cache,
+		cfg.source == opcda.SourceCache,
 	)
 	ticker := time.NewTicker(cfg.interval)
 	defer ticker.Stop()
@@ -117,7 +118,7 @@ func runPoll(
 			}
 		}
 		start := time.Now()
-		values, err := group.Read(ctx, cfg.cache)
+		values, err := group.Read(ctx, cfg.source)
 		elapsed := time.Since(start)
 		if err != nil {
 			return err
@@ -161,5 +162,5 @@ func runPoll(
 		Bad            int     `json:"badQualitySamples"`
 		Failed         int     `json:"failedSamples"`
 		FirstError     string  `json:"firstError,omitempty"`
-	}{len(items), cfg.cycles, cfg.interval.Milliseconds(), group.RevisedUpdateRate().Milliseconds(), cfg.cache, sum / float64(len(durations)), durations[(len(durations)*95+99)/100-1], durations[len(durations)-1], missed, good, bad, failed, firstError})
+	}{len(items), cfg.cycles, cfg.interval.Milliseconds(), group.RevisedUpdateRate().Milliseconds(), cfg.source == opcda.SourceCache, sum / float64(len(durations)), durations[(len(durations)*95+99)/100-1], durations[len(durations)-1], missed, good, bad, failed, firstError})
 }

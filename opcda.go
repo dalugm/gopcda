@@ -46,21 +46,29 @@ func (c ServerConfig) String() string {
 	return fmt.Sprintf("%s@%s", c.Username, c.Host)
 }
 
-// DataValue holds a single OPC item's value, quality, and timestamps.
-type DataValue struct {
-	ItemID            string
-	Value             any // Standard scalars, time.Time, Currency, Decimal, ErrorCode, Array, Variant, or nil.
-	Quality           int16
-	TimestampMs       int64 // OPC DA server timestamp (from cache)
-	SourceTimestampMs int64 // Server-provided timestamp; not proof of independent device sampling.
-	Error             error `json:"-"`
+// ReadSource selects the source of a synchronous group read.
+// Its zero value is invalid; choose SourceCache or SourceDevice explicitly.
+type ReadSource uint32
+
+const (
+	// SourceCache reads the OPC server's cache.
+	SourceCache ReadSource = 1
+	// SourceDevice requests a read from the device.
+	SourceDevice ReadSource = 2
+)
+
+func (s ReadSource) validate() error {
+	if s != SourceCache && s != SourceDevice {
+		return fmt.Errorf("opcda: invalid read source %d", s)
+	}
+	return nil
 }
 
 // ReadResult holds the result of a single item read.
 type ReadResult struct {
 	ItemID            string
-	Value             any
+	Value             any // Standard scalars, time.Time, Currency, Decimal, ErrorCode, Array, Variant, or nil.
 	Quality           int16
-	SourceTimestampMs int64
-	Error             error `json:"-"`
+	SourceTimestampMs int64 // Server timestamp in Unix milliseconds; not proof of fresh device sampling.
+	Error             error `json:"-"` // Per-item failure; inspect before using the value, quality or timestamp.
 }

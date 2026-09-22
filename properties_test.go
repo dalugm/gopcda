@@ -112,8 +112,7 @@ func TestUnsupportedCOMPropertyPreservesSiblingAndHRESULT(t *testing.T) {
 		got[1].Error == nil {
 		t.Fatalf("properties=%+v", got)
 	}
-	var hr *HRESULTError
-	if !errors.As(got[2].Error, &hr) {
+	if _, ok := errors.AsType[*HRESULTError](got[2].Error); !ok {
 		t.Fatalf("lost per-item HRESULT: %v", got[2].Error)
 	}
 }

@@ -64,7 +64,7 @@ func TestProgIDWire(t *testing.T) {
 	if id, err := r.result("Vendor.Server.1"); err != nil || id != opcEnumCLSID {
 		t.Fatalf("%s %v", id, err)
 	}
-	for n := 0; n < len(reply); n++ {
+	for n := range reply {
 		if err := ndr.Unmarshal(reply[:n], &r); err == nil {
 			t.Fatalf("accepted truncation %d", n)
 		}

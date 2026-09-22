@@ -79,7 +79,7 @@ func TestStatusResponse(t *testing.T) {
 		s.StartTime.Unix() != 0 {
 		t.Fatalf("%+v", s)
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		var r getStatusResp
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("accepted truncated response %d", n)

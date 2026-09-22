@@ -52,7 +52,7 @@ func TestEnumFinalPartialBatch(t *testing.T) {
 	if r.hresult != 1 || r.fetched != 2 || !reflect.DeepEqual(r.values, []string{"A", "B"}) {
 		t.Fatalf("%+v", r)
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		r := enumNextResponse{requested: 5}
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("accepted truncation %d", n)
@@ -132,7 +132,7 @@ func TestBrowseEnumeratorReference(t *testing.T) {
 	if _, err := decodeStandardReference(r.pointer, browseIID); err == nil {
 		t.Fatal("accepted incorrect IID")
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		var r browseIDsResponse
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("accepted truncated pointer response %d", n)

@@ -74,7 +74,7 @@ func TestGroupRemoveItemsUpdatesReadAndRegistration(t *testing.T) {
 	if _, exists := persistent.items["A"]; exists {
 		t.Fatal("removed item still registered")
 	}
-	read, err := g.Read(context.Background(), true)
+	read, err := g.Read(context.Background(), SourceCache)
 	if err != nil || len(read) != 2 || read[0].ItemID != "B" || read[1].ItemID != "C" {
 		t.Fatalf("Read = %+v, %v", read, err)
 	}

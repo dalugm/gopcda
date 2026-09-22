@@ -46,7 +46,7 @@ func TestBatchReadDeferredVariants(t *testing.T) {
 		out[1].Error == nil {
 		t.Fatalf("%+v", out)
 	}
-	for n := 0; n < len(b); n++ {
+	for n := range b {
 		r := batchReadResponse{count: 2}
 		if err := ndr.Unmarshal(b[:n], &r); err == nil {
 			t.Fatalf("accepted truncation %d", n)

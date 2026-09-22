@@ -195,7 +195,7 @@ type groupLifecycleConn struct {
 func (c *groupLifecycleConn) addGroup(
 	ctx context.Context,
 	_ string,
-	_ int,
+	_ int64,
 	_ float32,
 ) (*Group, error) {
 	close(c.started)
@@ -208,7 +208,7 @@ func TestCloseCancelsGroupCreation(t *testing.T) {
 	c := &groupLifecycleConn{started: make(chan struct{})}
 	s := &Server{ctx: ctx, cancel: cancel, conn: c}
 	done := make(chan error, 1)
-	go func() { _, err := s.AddGroupContext(context.Background(), "test", 500, 0); done <- err }()
+	go func() { _, err := s.AddGroup(context.Background(), "test", 500*time.Millisecond, 0); done <- err }()
 	<-c.started
 	if err := s.Close(context.Background()); err != nil {
 		t.Fatal(err)

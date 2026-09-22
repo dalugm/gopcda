@@ -32,7 +32,7 @@ func TestLivePersistentRead(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	g, err := s.AddGroupContext(ctx, "", 500, 0)
+	g, err := s.AddGroup(ctx, "", 500*time.Millisecond, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestLivePersistentRead(t *testing.T) {
 	t.Log("AddItems", len(items), time.Since(start))
 	for i := range 3 {
 		start := time.Now()
-		result, err := g.Read(ctx, false)
+		result, err := g.Read(ctx, SourceDevice)
 		if err != nil {
 			t.Fatal(err)
 		}

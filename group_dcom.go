@@ -72,7 +72,7 @@ func (c *dcomConn) getGroup(handle int) (*persistentGroup, error) {
 func (c *dcomConn) addGroup(
 	ctx context.Context,
 	name string,
-	rate int,
+	rate int64,
 	deadband float32,
 ) (*Group, error) {
 	if err := ctx.Err(); err != nil {
@@ -113,13 +113,13 @@ func (c *dcomConn) addGroup(
 		c.groups = make(map[int]*persistentGroup)
 	}
 	c.groups[g.handle] = g
-	return &Group{handle: g.handle, updateRateMs: int(g.rate)}, nil
+	return &Group{handle: g.handle, updateRateMs: g.rate}, nil
 }
 
 func (c *dcomConn) openPersistentGroup(
 	ctx context.Context,
 	name string,
-	rate int,
+	rate int64,
 	deadband float32,
 ) (g *persistentGroup, retErr error) {
 	g = newPersistentGroup()

@@ -22,7 +22,7 @@ func (g *fakePollingGroup) AddItems(context.Context, []string) ([]*opcda.Item, e
 	return []*opcda.Item{{ItemID: "A", Error: g.addErr}}, nil
 }
 
-func (g *fakePollingGroup) Read(context.Context, bool) ([]opcda.ReadResult, error) {
+func (g *fakePollingGroup) Read(context.Context, opcda.ReadSource) ([]opcda.ReadResult, error) {
 	g.reads++
 	return []opcda.ReadResult{{ItemID: "A", Quality: 0xc0}}, g.fail
 }
@@ -33,7 +33,12 @@ func TestPollUsesOneGroupAndReportsRevisedRate(t *testing.T) {
 	var out, diag bytes.Buffer
 	if err := runPoll(
 		context.Background(),
-		&pollConfig{ids: []string{"A"}, interval: time.Millisecond, cycles: 3, cache: true},
+		&pollConfig{
+			ids:      []string{"A"},
+			interval: time.Millisecond,
+			cycles:   3,
+			source:   opcda.SourceCache,
+		},
 		g,
 		&out,
 		&diag,

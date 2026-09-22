@@ -71,13 +71,13 @@ func TestSetupCancellationDoesNotCancelEstablishedSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		cancel()
-		if _, err = s.GetServerStatusContext(context.Background()); err != nil {
+		if _, err = s.GetServerStatus(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		if err = s.Close(context.Background()); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = s.GetServerStatusContext(context.Background()); !errors.Is(err, ErrClosed) {
+		if _, err = s.GetServerStatus(context.Background()); !errors.Is(err, ErrClosed) {
 			t.Fatal(err)
 		}
 		if err = s.Close(context.Background()); err != nil || closed != 1 {
@@ -124,12 +124,12 @@ func TestStatusDeadlineAndCloseCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err = s.GetServerStatusContext(ctx); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err = s.GetServerStatus(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
 	<-started
 	done := make(chan error, 1)
-	go func() { _, err := s.GetServerStatusContext(context.Background()); done <- err }()
+	go func() { _, err := s.GetServerStatus(context.Background()); done <- err }()
 	<-started
 	if err = s.Close(context.Background()); err != nil {
 		t.Fatal(err)

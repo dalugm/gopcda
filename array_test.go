@@ -114,7 +114,7 @@ func TestArrayWireFixture(t *testing.T) {
 			t.Fatalf("accepted malformed array at offset %d", mutation.offset)
 		}
 	}
-	for end := 0; end < len(wire); end++ {
+	for end := range wire {
 		var v oaut.Variant
 		if err := ndr.Unmarshal(
 			wire[:end],

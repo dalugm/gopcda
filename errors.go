@@ -36,8 +36,7 @@ func (e *HRESULTError) Error() string {
 	result := fmt.Sprintf("HRESULT 0x%08x", e.Code)
 	name, description := describeOPCError(e.Code)
 	if name == "" {
-		var standard *hresult.Error
-		if errors.As(hresult.FromCode(e.Code), &standard) {
+		if standard, ok := errors.AsType[*hresult.Error](hresult.FromCode(e.Code)); ok {
 			name, description = standard.Name, standard.Details
 		}
 	}

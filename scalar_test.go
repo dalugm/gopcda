@@ -151,7 +151,7 @@ func TestBSTRMalformedLengths(t *testing.T) {
 			),
 		)
 	}
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		if err := decode(b[:i]); err == nil {
 			t.Fatalf("accepted truncation %d", i)
 		}

@@ -10,7 +10,7 @@ import (
 type Group struct {
 	server       *Server
 	name         string
-	updateRateMs int
+	updateRateMs uint32
 	handle       int // server-allocated group handle
 }
 
@@ -50,32 +50,47 @@ func (g *Group) RevisedUpdateRate() time.Duration {
 	return time.Duration(g.updateRateMs) * time.Millisecond
 }
 
-// Read performs a synchronous cache read on all items in the group.
-// cache=true reads from OPC cache; cache=false reads from device.
+// Read performs a synchronous read from source on all items in the group.
 // Results follow registration order. Like ReadItems, it preserves observations
 // from completed batches alongside a later operation error.
-func (g *Group) Read(ctx context.Context, cache bool) ([]ReadResult, error) {
+func (g *Group) Read(ctx context.Context, source ReadSource) ([]ReadResult, error) {
 	ctx, done := g.server.operationContext(ctx)
 	defer done()
 	if err := g.server.operationError(ctx); err != nil {
 		return nil, err
 	}
-	return g.server.conn.readGroup(ctx, g.handle, cache)
+	if err := source.validate(); err != nil {
+		return nil, err
+	}
+	return g.server.conn.readGroup(ctx, g.handle, source == SourceCache)
 }
 
-// ReadItems performs a synchronous cache read on specific items.
+// ReadItems performs a synchronous read from source on specific items.
 // If an operation fails, it returns only observed results, in request order,
 // alongside the error. Registered items in uncompleted batches are omitted.
-func (g *Group) ReadItems(ctx context.Context, itemIDs []string, cache bool) ([]ReadResult, error) {
+func (g *Group) ReadItems(
+	ctx context.Context,
+	itemIDs []string,
+	source ReadSource,
+) ([]ReadResult, error) {
 	ctx, done := g.server.operationContext(ctx)
 	defer done()
 	if err := g.server.operationError(ctx); err != nil {
 		return nil, err
 	}
-	return g.server.conn.read(ctx, g.handle, itemIDs, cache)
+	if err := source.validate(); err != nil {
+		return nil, err
+	}
+	return g.server.conn.read(ctx, g.handle, itemIDs, source == SourceCache)
 }
 
 // Write writes values to items in this group.
+// The returned map contains every requested ItemID: nil means acknowledged;
+// a non-nil value describes that item's failure. Always inspect the map, even
+// when the overall error is nil. An overall error stops the operation but keeps
+// earlier outcomes. errors.Is identifies ErrWriteNotAttempted for unsent items
+// and ErrWriteOutcomeUnknown for writes whose outcome could not be confirmed.
+// Writes are never automatically retried.
 func (g *Group) Write(ctx context.Context, values map[string]any) (map[string]error, error) {
 	ctx, done := g.server.operationContext(ctx)
 	defer done()
