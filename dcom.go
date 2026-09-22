@@ -28,6 +28,7 @@ type dcomConn struct {
 	groupsMu        sync.Mutex
 	groupOps        sync.WaitGroup
 	pendingRemovals map[int]bool
+	nextGroupID     int
 	groups          map[int]*persistentGroup
 	closed          bool
 	pingMu          sync.Mutex

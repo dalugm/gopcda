@@ -53,7 +53,7 @@ func removalTestGroup(t *testing.T) (*Group, *persistentGroup, *itemRemovalConn)
 	t.Cleanup(cancel)
 	return &Group{
 		server: &Server{conn: c, ctx: ctx, cancel: cancel},
-		handle: 1,
+		id:     1,
 	}, persistent, transport
 }
 

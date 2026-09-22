@@ -11,7 +11,7 @@ type Group struct {
 	server       *Server
 	name         string
 	updateRateMs uint32
-	handle       int // server-allocated group handle
+	id           int // Session-local identity; never reused for another group.
 }
 
 // Item represents an OPC DA item within a group.
@@ -32,7 +32,7 @@ func (g *Group) AddItems(ctx context.Context, itemIDs []string) ([]*Item, error)
 	if err := g.server.operationError(ctx); err != nil {
 		return nil, err
 	}
-	items, err := g.server.conn.addItems(ctx, g.handle, itemIDs)
+	items, err := g.server.conn.addItems(ctx, g.id, itemIDs)
 	for _, it := range items {
 		if it == nil || it.Error != nil {
 			continue
@@ -62,7 +62,7 @@ func (g *Group) Read(ctx context.Context, source ReadSource) ([]ReadResult, erro
 	if err := source.validate(); err != nil {
 		return nil, err
 	}
-	return g.server.conn.readGroup(ctx, g.handle, source == SourceCache)
+	return g.server.conn.readGroup(ctx, g.id, source == SourceCache)
 }
 
 // ReadItems performs a synchronous read from source on specific items.
@@ -81,7 +81,7 @@ func (g *Group) ReadItems(
 	if err := source.validate(); err != nil {
 		return nil, err
 	}
-	return g.server.conn.read(ctx, g.handle, itemIDs, source == SourceCache)
+	return g.server.conn.read(ctx, g.id, itemIDs, source == SourceCache)
 }
 
 // Write writes values to items in this group.
@@ -97,7 +97,7 @@ func (g *Group) Write(ctx context.Context, values map[string]any) (map[string]er
 	if err := g.server.operationError(ctx); err != nil {
 		return unattemptedWrites(values, err), err
 	}
-	return g.server.conn.write(ctx, g.handle, values)
+	return g.server.conn.write(ctx, g.id, values)
 }
 
 // SetActive activates or deactivates the group without changing its update rate
@@ -108,7 +108,7 @@ func (g *Group) SetActive(ctx context.Context, active bool) error {
 	if err := g.server.operationError(ctx); err != nil {
 		return err
 	}
-	if err := g.server.conn.setGroupActive(ctx, g.handle, active); err != nil {
+	if err := g.server.conn.setGroupActive(ctx, g.id, active); err != nil {
 		return fmt.Errorf("opcda: set group %q active=%v: %w", g.name, active, err)
 	}
 	return nil
@@ -121,7 +121,7 @@ func (g *Group) Remove(ctx context.Context) error {
 	if err := g.server.operationError(ctx); err != nil {
 		return err
 	}
-	return g.server.conn.removeGroup(ctx, g.handle)
+	return g.server.conn.removeGroup(ctx, g.id)
 }
 
 // RemoveItems unregisters items without removing the group or closing its session.
@@ -135,5 +135,5 @@ func (g *Group) RemoveItems(ctx context.Context, itemIDs []string) (map[string]e
 	if err := g.server.operationError(ctx); err != nil {
 		return removalErrors(itemIDs, err), err
 	}
-	return g.server.conn.removeItems(ctx, g.handle, itemIDs)
+	return g.server.conn.removeItems(ctx, g.id, itemIDs)
 }

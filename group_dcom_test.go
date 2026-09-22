@@ -76,7 +76,7 @@ func testPersistent() (*dcomConn, *persistentGroup, *batchConn) {
 	g.itemConn = wire
 	g.syncIPID = &dcom.IPID{}
 	g.itemIPID = &dcom.IPID{}
-	c := &dcomConn{groups: map[int]*persistentGroup{1: g}}
+	c := &dcomConn{nextGroupID: 1, groups: map[int]*persistentGroup{1: g}}
 	return c, g, wire
 }
 
@@ -145,7 +145,7 @@ func TestBatchAddPartialAndDuplicate(t *testing.T) {
 
 func TestBatchAddRejectsInvalidUTF8WithoutChangingItemIdentity(t *testing.T) {
 	c, persistent, wire := testPersistent()
-	g := &Group{server: &Server{ctx: t.Context(), conn: c}, handle: persistent.handle}
+	g := &Group{server: &Server{ctx: t.Context(), conn: c}, id: 1}
 	ids := []string{"Pump.\xff", "Pump.\ufffd", "Pump.\U0001f600"}
 	items, err := g.AddItems(t.Context(), ids)
 	if err != nil || len(items) != 3 {
@@ -258,7 +258,7 @@ func TestFailedRemovalRetainedForClose(t *testing.T) {
 	c.serverConn = wire
 	c.serverIPID = &dcom.IPID{}
 	wire.fail = context.DeadlineExceeded
-	if err := c.removeGroup(context.Background(), g.handle); err == nil {
+	if err := c.removeGroup(context.Background(), 1); err == nil {
 		t.Fatal("expected removal failure")
 	}
 	if !c.pendingRemovals[g.handle] {

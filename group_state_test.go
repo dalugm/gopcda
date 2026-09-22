@@ -38,7 +38,7 @@ func TestSetActivePreservesGroupSamplingProperties(t *testing.T) {
 	persistent.stateConn = wire
 	persistent.rate = 600
 	s := &Server{ctx: t.Context(), conn: c}
-	g := &Group{server: s, handle: persistent.handle, updateRateMs: 600}
+	g := &Group{server: s, id: 1, updateRateMs: 600}
 	for _, active := range []bool{false, true} {
 		if err := g.SetActive(t.Context(), active); err != nil {
 			t.Fatal(err)

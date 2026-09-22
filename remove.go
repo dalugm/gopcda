@@ -18,10 +18,10 @@ func removalErrors(ids []string, cause error) map[string]error {
 
 func (c *dcomConn) removeItems(
 	ctx context.Context,
-	handle int,
+	groupID int,
 	ids []string,
 ) (map[string]error, error) {
-	g, err := c.getGroup(handle)
+	g, err := c.getGroup(groupID)
 	if err != nil {
 		return removalErrors(ids, err), err
 	}

@@ -62,12 +62,12 @@ func (g *persistentGroup) acquire(ctx context.Context) error {
 	return nil
 }
 func (g *persistentGroup) release() { g.gate <- struct{}{} }
-func (c *dcomConn) getGroup(handle int) (*persistentGroup, error) {
+func (c *dcomConn) getGroup(id int) (*persistentGroup, error) {
 	c.groupsMu.Lock()
 	defer c.groupsMu.Unlock()
-	g := c.groups[handle]
+	g := c.groups[id]
 	if g == nil {
-		return nil, fmt.Errorf("%w: %d", ErrGroupClosed, handle)
+		return nil, fmt.Errorf("%w: %d", ErrGroupClosed, id)
 	}
 	return g, nil
 }
@@ -107,19 +107,32 @@ func (c *dcomConn) addGroup(
 		defer cancel()
 		return nil, errors.Join(err, c.disposeGroup(cleanup, g, true))
 	}
-	c.groupsMu.Lock()
-	if c.closed {
-		c.groupsMu.Unlock()
+	group, err := c.registerGroup(g)
+	if err != nil {
 		cleanup, cancel := cleanupContext()
 		defer cancel()
-		return nil, errors.Join(ErrClosed, c.disposeGroup(cleanup, g, true))
+		return nil, errors.Join(err, c.disposeGroup(cleanup, g, true))
 	}
+	return group, nil
+}
+
+// registerGroup assigns a local identity independently of the reusable server
+// handle. Removed Group values must never resolve to a later group instance.
+func (c *dcomConn) registerGroup(g *persistentGroup) (*Group, error) {
+	c.groupsMu.Lock()
 	defer c.groupsMu.Unlock()
+	if c.closed {
+		return nil, ErrClosed
+	}
+	if c.nextGroupID == math.MaxInt {
+		return nil, errors.New("group identity range exhausted")
+	}
+	c.nextGroupID++
 	if c.groups == nil {
 		c.groups = make(map[int]*persistentGroup)
 	}
-	c.groups[g.handle] = g
-	return &Group{handle: g.handle, updateRateMs: g.rate}, nil
+	c.groups[c.nextGroupID] = g
+	return &Group{id: c.nextGroupID, updateRateMs: g.rate}, nil
 }
 
 func (c *dcomConn) openPersistentGroup(
@@ -308,7 +321,7 @@ func (c *dcomConn) disposeGroup(ctx context.Context, g *persistentGroup, created
 	return errors.Join(errs...)
 }
 
-func (c *dcomConn) removeGroup(ctx context.Context, handle int) error {
+func (c *dcomConn) removeGroup(ctx context.Context, id int) error {
 	c.groupsMu.Lock()
 	if c.closed {
 		c.groupsMu.Unlock()
@@ -317,11 +330,11 @@ func (c *dcomConn) removeGroup(ctx context.Context, handle int) error {
 	c.groupOps.Add(1)
 	c.groupsMu.Unlock()
 	defer c.groupOps.Done()
-	return c.removeGroupInternal(ctx, handle)
+	return c.removeGroupInternal(ctx, id)
 }
 
-func (c *dcomConn) removeGroupInternal(ctx context.Context, handle int) error {
-	g, err := c.getGroup(handle)
+func (c *dcomConn) removeGroupInternal(ctx context.Context, id int) error {
+	g, err := c.getGroup(id)
 	if err != nil {
 		return err
 	}
@@ -331,17 +344,17 @@ func (c *dcomConn) removeGroupInternal(ctx context.Context, handle int) error {
 	defer g.release()
 	g.closed = true
 	c.groupsMu.Lock()
-	delete(c.groups, handle)
+	delete(c.groups, id)
 	c.groupsMu.Unlock()
 	return c.disposeGroup(ctx, g, true)
 }
 
 func (c *dcomConn) setGroupActive(
 	ctx context.Context,
-	handle int,
+	id int,
 	active bool,
 ) error {
-	g, err := c.getGroup(handle)
+	g, err := c.getGroup(id)
 	if err != nil {
 		return err
 	}

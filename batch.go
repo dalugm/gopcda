@@ -11,8 +11,8 @@ import (
 	"github.com/oiweiwei/go-msrpc/msrpc/dcom/oaut"
 )
 
-func (c *dcomConn) addItems(ctx context.Context, handle int, ids []string) ([]*Item, error) {
-	g, err := c.getGroup(handle)
+func (c *dcomConn) addItems(ctx context.Context, groupID int, ids []string) ([]*Item, error) {
+	g, err := c.getGroup(groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -99,11 +99,11 @@ func publicItem(id string, v registeredItem) *Item {
 
 func (c *dcomConn) read(
 	ctx context.Context,
-	handle int,
+	groupID int,
 	ids []string,
 	cache bool,
 ) ([]ReadResult, error) {
-	g, err := c.getGroup(handle)
+	g, err := c.getGroup(groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +116,10 @@ func (c *dcomConn) read(
 
 func (c *dcomConn) readGroup(
 	ctx context.Context,
-	handle int,
+	groupID int,
 	cache bool,
 ) ([]ReadResult, error) {
-	g, err := c.getGroup(handle)
+	g, err := c.getGroup(groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -200,10 +200,10 @@ func (c *dcomConn) readLocked(
 
 func (c *dcomConn) write(
 	ctx context.Context,
-	handle int,
+	groupID int,
 	values map[string]any,
 ) (map[string]error, error) {
-	g, err := c.getGroup(handle)
+	g, err := c.getGroup(groupID)
 	if err != nil {
 		return unattemptedWrites(values, err), err
 	}

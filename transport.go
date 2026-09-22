@@ -11,16 +11,16 @@ type connection interface {
 	browseItemIDs(ctx context.Context) ([]string, error)
 	itemProperties(ctx context.Context, id string) ([]ItemProperty, error)
 	addGroup(ctx context.Context, name string, updateRateMs int64, deadband float32) (*Group, error)
-	addItems(ctx context.Context, groupHandle int, itemIDs []string) ([]*Item, error)
-	removeItems(ctx context.Context, groupHandle int, itemIDs []string) (map[string]error, error)
-	readGroup(ctx context.Context, groupHandle int, cache bool) ([]ReadResult, error)
-	read(ctx context.Context, groupHandle int, itemIDs []string, cache bool) ([]ReadResult, error)
-	write(ctx context.Context, groupHandle int, values map[string]any) (map[string]error, error)
+	addItems(ctx context.Context, groupID int, itemIDs []string) ([]*Item, error)
+	removeItems(ctx context.Context, groupID int, itemIDs []string) (map[string]error, error)
+	readGroup(ctx context.Context, groupID int, cache bool) ([]ReadResult, error)
+	read(ctx context.Context, groupID int, itemIDs []string, cache bool) ([]ReadResult, error)
+	write(ctx context.Context, groupID int, values map[string]any) (map[string]error, error)
 	setGroupActive(
 		ctx context.Context,
-		groupHandle int,
+		groupID int,
 		active bool,
 	) error
-	removeGroup(ctx context.Context, groupHandle int) error
+	removeGroup(ctx context.Context, groupID int) error
 	getServerStatus(ctx context.Context) (*ServerStatus, error)
 }

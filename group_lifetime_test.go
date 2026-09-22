@@ -31,7 +31,7 @@ func TestServerCloseCancelsPublicGroupRemoval(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g := &Group{server: s, handle: 1}
+		g := &Group{server: s, id: 1}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		removed := make(chan error, 1)

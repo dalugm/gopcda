@@ -269,20 +269,26 @@ func (c *dcomConn) closeContext(ctx context.Context) error {
 	}
 	var errs []error
 	c.groupsMu.Lock()
-	handles := make([]int, 0, len(c.groups))
-	for h := range c.groups {
-		handles = append(handles, h)
+	ids := make([]int, 0, len(c.groups))
+	activeHandles := make(map[int]bool, len(c.groups))
+	for id, g := range c.groups {
+		ids = append(ids, id)
+		activeHandles[g.handle] = true
 	}
 	pending := make([]int, 0, len(c.pendingRemovals))
 	for h := range c.pendingRemovals {
-		pending = append(pending, h)
+		// A completed removal may have lost its response and its handle may
+		// already belong to a new group. Its disposal below owns that handle.
+		if !activeHandles[h] {
+			pending = append(pending, h)
+		}
 	}
 	c.groupsMu.Unlock()
 	for _, h := range pending {
 		errs = append(errs, c.removeRemoteGroup(ctx, h))
 	}
-	for _, h := range handles {
-		errs = append(errs, c.removeGroupInternal(ctx, h))
+	for _, id := range ids {
+		errs = append(errs, c.removeGroupInternal(ctx, id))
 	}
 	errs = append(errs, c.releaseServerReference(ctx))
 	errs = append(errs, c.stopKeepalive(ctx))
